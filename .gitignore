@@ -25,6 +25,7 @@ htmlcov/
 .trash/
 *.log
 windows-*-smoke.png
+/windows-installer-shortcuts/
 .env
 .env.*
 *.pem

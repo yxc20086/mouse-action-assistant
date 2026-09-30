@@ -86,6 +86,7 @@ jobs:
             windows-*-smoke.json
             windows-*-smoke.png
             windows-installer-*.log
+            windows-installer-shortcuts/*.lnk
           if-no-files-found: ignore
 
   prepare-release:

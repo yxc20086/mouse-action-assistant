@@ -18,9 +18,26 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Runtime.InteropServices.ComTypes;
 public static class InstallerPathCheck {
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   public static extern uint GetLongPathName(string path, StringBuilder buffer, uint length);
+  [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+  private class ShellLink { }
+  [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  private interface IShellLinkW {
+    [PreserveSig]
+    int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int length, IntPtr data, uint flags);
+  }
+  public static string ReadShortcut(string path) {
+    object link = new ShellLink();
+    try {
+      ((IPersistFile)link).Load(path, 0);
+      var target = new StringBuilder(32768);
+      Marshal.ThrowExceptionForHR(((IShellLinkW)link).GetPath(target, target.Capacity, IntPtr.Zero, 4));
+      return target.ToString();
+    } finally { Marshal.FinalReleaseComObject(link); }
+  }
 }
 '@
 function Get-CanonicalPath([string]$Path) {
@@ -57,13 +74,16 @@ try {
     }
     $entry = Get-ItemProperty $registry
     if ($entry.DisplayVersion -ne $report.version) { throw 'Installed version does not match VERSION' }
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcutTarget = $shell.CreateShortcut($startShortcut).TargetPath
+    New-Item -ItemType Directory -Force -Path 'windows-installer-shortcuts' | Out-Null
+    Copy-Item -LiteralPath $startShortcut -Destination 'windows-installer-shortcuts/start-menu.lnk'
+    Copy-Item -LiteralPath $desktopShortcut -Destination 'windows-installer-shortcuts/desktop.lnk'
+    $shortcutTarget = [InstallerPathCheck]::ReadShortcut($startShortcut)
     $report.shortcut_target = $shortcutTarget
     $report.installed_executable = $exe
     Write-Host "Shortcut target: $shortcutTarget"
     Write-Host "Installed executable: $exe"
     if ((Get-CanonicalPath $shortcutTarget) -ne (Get-CanonicalPath $exe)) { throw 'Start menu shortcut has incorrect target' }
+    if ((Get-CanonicalPath ([InstallerPathCheck]::ReadShortcut($desktopShortcut))) -ne (Get-CanonicalPath $exe)) { throw 'Desktop shortcut has incorrect target' }
     $report.installed = $true
     $report.shortcuts = $true
 
