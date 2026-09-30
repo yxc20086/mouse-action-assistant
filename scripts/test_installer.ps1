@@ -14,6 +14,23 @@ function Invoke-CheckedProcess {
     if ($process.ExitCode -ne 0) { throw "Process failed ($($process.ExitCode)): $File" }
 }
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class InstallerPathCheck {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern uint GetLongPathName(string path, StringBuilder buffer, uint length);
+}
+'@
+function Get-CanonicalPath([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { throw "Shortcut target does not exist: $Path" }
+    $buffer = New-Object System.Text.StringBuilder 32768
+    $length = [InstallerPathCheck]::GetLongPathName($Path, $buffer, 32768)
+    if ($length -eq 0 -or $length -ge 32768) { throw "Cannot resolve path: $Path" }
+    return [IO.Path]::GetFullPath($buffer.ToString())
+}
+
 $report = @{ passed = $false; installer = 'NSIS'; version = (Get-Content VERSION -Raw).Trim() }
 $installer = (Resolve-Path 'dist-release/MouseActionAssistant-windows-x64-setup.exe').Path
 $installDir = Join-Path $env:RUNNER_TEMP ('Mouse 安装测试 ' + [guid]::NewGuid().ToString('N'))
@@ -41,12 +58,17 @@ try {
     $entry = Get-ItemProperty $registry
     if ($entry.DisplayVersion -ne $report.version) { throw 'Installed version does not match VERSION' }
     $shell = New-Object -ComObject WScript.Shell
-    if ($shell.CreateShortcut($startShortcut).TargetPath -ne $exe) { throw 'Start menu shortcut has incorrect target' }
+    $shortcutTarget = $shell.CreateShortcut($startShortcut).TargetPath
+    $report.shortcut_target = $shortcutTarget
+    $report.installed_executable = $exe
+    Write-Host "Shortcut target: $shortcutTarget"
+    Write-Host "Installed executable: $exe"
+    if ((Get-CanonicalPath $shortcutTarget) -ne (Get-CanonicalPath $exe)) { throw 'Start menu shortcut has incorrect target' }
     $report.installed = $true
     $report.shortcuts = $true
 
     $smokeReport = Join-Path $PWD 'windows-installed-smoke.json'
-    Invoke-CheckedProcess $exe @('--ci-smoke', ('"' + $smokeReport + '"'))
+    Invoke-CheckedProcess $shortcutTarget @('--ci-smoke', ('"' + $smokeReport + '"'))
     $smoke = Get-Content $smokeReport -Raw | ConvertFrom-Json
     if (-not $smoke.passed -or -not $smoke.frozen) { throw 'Installed application native smoke test failed' }
     $report.installed_app_smoke = $true
