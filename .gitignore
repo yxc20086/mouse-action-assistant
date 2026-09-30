@@ -11,6 +11,8 @@ htmlcov/
 /build*/
 /dist*/
 /dmg_staging/
+/downloaded/
+/release-assets/
 *.app/
 *.dmg
 *.spec

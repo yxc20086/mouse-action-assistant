@@ -3,10 +3,15 @@ name: Build desktop apps
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -61,7 +66,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: MouseActionAssistant-${{ matrix.artifact }}
-          path: dist-release/*.zip
+          path: |
+            dist-release/*.zip
+            dist-release/*.dmg
           if-no-files-found: error
       - name: Upload Windows diagnostics
         if: always() && runner.os == 'Windows'
@@ -72,3 +79,58 @@ jobs:
             windows-*-smoke.json
             windows-*-smoke.png
           if-no-files-found: ignore
+
+  prepare-release:
+    name: Verify release assets
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: MouseActionAssistant-windows-x64
+          path: downloaded
+      - uses: actions/download-artifact@v8
+        with:
+          name: MouseActionAssistant-macos-arm64
+          path: downloaded
+      - name: Verify and version artifacts
+        run: python3 scripts/release_assets.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-bundle
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: prepare-release
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-bundle
+          path: release-assets
+      - name: Publish verified artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          resolved_commit=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          test "$resolved_commit" = "$GITHUB_SHA"
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+          release_options=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            release_options+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --verify-tag --title "鼠标动作助手 $RELEASE_TAG" \
+            --notes-file .github/RELEASE_NOTES.md "${release_options[@]}"

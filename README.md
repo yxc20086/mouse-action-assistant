@@ -97,7 +97,27 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 ## 自动与本地构建
 
-推送到 `main` 自动运行 GitHub Actions，也可在仓库 **Actions → Build desktop apps → Run workflow** 手动触发。构建成功后，在对应运行的 **Artifacts** 下载 Windows x64 或 macOS arm64 ZIP。
+推送到 `main` 自动运行 GitHub Actions，也可在仓库 **Actions → Build desktop apps → Run workflow** 手动触发。构建成功后，在对应运行的 **Artifacts** 下载 Windows x64 ZIP、macOS arm64 ZIP/DMG 或带校验文件的 `release-bundle`。普通分支构建只生成快照包，不创建正式 Release。
+
+### 自动发布到 GitHub Releases
+
+先确保想发布的代码已经提交并推送，然后为它创建版本标签，例如：
+
+```bash
+git pull --ff-only
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+标签推送后将重新执行 Windows/macOS 测试与构建；**两平台全部通过、产物齐全且校验通过后**，才自动创建 [GitHub Release](https://github.com/yxc20086/mouse-action-assistant/releases)。发布步骤再次确认标签仍指向本次测试的提交，避免标签移动导致产物与源码不一致。
+
+- 正式版本：`v1.0.0`、`v1.0.1` 等。
+- 预发布：`v1.1.0-rc.1` 等带后缀标签，会标记为 Pre-release，不标记为 Latest。
+- 不要重复使用已发布的版本号；流程不会覆盖或删除已有 Release 附件。
+- 从 `main` 手动点 Run workflow 只构建，不发布；选择已有版本标签手动运行会进入发布流程。
+- 不需要配置个人访问令牌；仅发布任务使用 GitHub 自动提供的 `GITHUB_TOKEN` 与 `contents: write` 权限。如果组织策略禁止写入，请由仓库管理员调整 Actions 权限。
+
+每次 Release 包含带版本号的 Windows ZIP、macOS ZIP 和 DMG，以及 `SHA256SUMS.txt`、`build-info.json`。实际发布不会附带用户的录制或诊断数据。
 
 本地使用平台原生 Python 执行（Windows 用 `.\venv\Scripts\python.exe`）：
 
@@ -106,6 +126,6 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 ./venv/bin/python3 scripts/build.py
 ```
 
-Windows 产物位于 `dist-release/MouseActionAssistant/` 与 `dist-release/MouseActionAssistant-windows-x64.zip`，macOS 产物为 `dist-release/鼠标动作助手.app`。不能在 macOS 上直接交叉生成 Windows EXE。
+Windows 产物位于 `dist-release/MouseActionAssistant/` 与 `dist-release/MouseActionAssistant-windows-x64.zip`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
 
 新的构建脚本不安装到系统目录，也不自动删除旧产物。旧的 `build_package.py` 会清理旧构建并覆盖本机应用，保留供参考，不用于当前跨平台构建。

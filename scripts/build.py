@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,8 +38,19 @@ def main():
         shutil.make_archive(str(output/"MouseActionAssistant-windows-x64"), "zip", root_dir=output, base_dir=name)
         print(output/"MouseActionAssistant-windows-x64.zip")
     else:
-        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(output/(name+".app"))], check=True)
-        print(output/(name+".app"))
+        app = output/(name+".app")
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+        dmg = output/("MouseActionAssistant-macos-"+platform.machine()+".dmg")
+        if dmg.exists():
+            raise FileExistsError(f"安装包已存在，不覆盖：{dmg}")
+        with tempfile.TemporaryDirectory(prefix="mouse-assistant-dmg-") as directory:
+            staging = Path(directory)
+            subprocess.run(["ditto", str(app), str(staging/app.name)], check=True)
+            (staging/"Applications").symlink_to("/Applications")
+            subprocess.run(["hdiutil", "create", "-volname", name, "-srcfolder", str(staging),
+                            "-format", "UDZO", str(dmg)], check=True)
+        subprocess.run(["hdiutil", "verify", str(dmg)], check=True)
+        print(dmg)
 
 
 if __name__ == "__main__":
