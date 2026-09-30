@@ -30,7 +30,7 @@ class EngineTests(unittest.TestCase):
         self.quartz.CGPointMake.side_effect = lambda x, y: (x, y)
         self.quartz.CGEventCreateMouseEvent.side_effect = (
             lambda source, kind, point, button: dict(kind=kind, point=point, button=button))
-        self.quartz.CGEventGetLocation.return_value = (100, 200)
+        self.quartz.CGEventGetLocation.return_value = types.SimpleNamespace(x=100, y=200)
         self.mouse = MagicMock()
         self.modules = patch.dict(sys.modules, {
             "Quartz": self.quartz,
@@ -40,8 +40,9 @@ class EngineTests(unittest.TestCase):
         self.modules.start()
         self.addCleanup(self.modules.stop)
         module = load_module("engine_test", "engine.py")
+        from mouse_backends import MacMouseBackend
         with patch.object(module.MacroEngine, "_init_hotkeys"):
-            self.engine = module.MacroEngine()
+            self.engine = module.MacroEngine(backend=MacMouseBackend())
 
     def dispatch(self, kind, button="left"):
         self.engine._dispatch_event(dict(type=kind, x=100, y=200, button=button))
@@ -199,14 +200,14 @@ class EngineTests(unittest.TestCase):
 class PermissionTests(unittest.TestCase):
     def test_detection_error_denies_access(self):
         module = load_module("permission_test", "permission_checker.py")
-        with patch.object(module.ctypes.cdll, "LoadLibrary", side_effect=OSError):
+        with patch.object(module.sys, "platform", "darwin"), patch.object(module.ctypes.cdll, "LoadLibrary", side_effect=OSError):
             self.assertFalse(module.is_accessibility_trusted())
 
     def test_listener_does_not_grant_post_permission(self):
         module = load_module("permission_test", "permission_checker.py")
         library = MagicMock()
         library.AXIsProcessTrusted.return_value = False
-        with patch.object(module.ctypes.cdll, "LoadLibrary", return_value=library):
+        with patch.object(module.sys, "platform", "darwin"), patch.object(module.ctypes.cdll, "LoadLibrary", return_value=library):
             self.assertFalse(module.is_accessibility_trusted())
 
 

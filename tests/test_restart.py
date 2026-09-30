@@ -16,11 +16,11 @@ class RestartTests(unittest.TestCase):
             executable = bundle / "Contents/MacOS/鼠标助手"
             executable.parent.mkdir(parents=True)
             (bundle / "Contents/Info.plist").write_text("test")
-            with patch.object(sys, "executable", str(executable)), patch.object(sys, "frozen", True, create=True):
+            with patch.object(sys, "platform", "darwin"), patch.object(sys, "executable", str(executable)), patch.object(sys, "frozen", True, create=True):
                 self.assertEqual(restart_command(), ["/usr/bin/open", "-n", str(bundle.resolve())])
 
     def test_invalid_bundle_is_rejected(self):
-        with patch.object(sys, "executable", "/private/tmp/missing-executable"), patch.object(sys, "frozen", True, create=True):
+        with patch.object(sys, "platform", "darwin"), patch.object(sys, "executable", "/private/tmp/missing-executable"), patch.object(sys, "frozen", True, create=True):
             with self.assertRaises(RuntimeError): restart_command()
 
     def test_development_relaunch_uses_absolute_script(self):
@@ -45,6 +45,9 @@ class RestartTests(unittest.TestCase):
                 self.assertFalse(marker.exists())
                 parent.terminate(); parent.wait(timeout=3)
                 self.assertEqual(helper.wait(timeout=5), 0)
+                deadline = time.monotonic() + 5
+                while not marker.exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
                 self.assertEqual(marker.read_text(), "started")
             finally:
                 for process in (helper, parent):

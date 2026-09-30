@@ -92,6 +92,7 @@ body {
 .permission-action.granted { color: var(--accent-green); }
 .permission-action.denied, .permission-action.error { color: var(--accent-red); }
 .permission-action.checking { color: var(--accent-orange); }
+.platform-windows .mac-permission-only, .platform-windows #inputPermissionBtn, .platform-windows #accessibilityPermissionBtn { display: none; }
 button:disabled { opacity: .4; cursor: not-allowed; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
 .record-status { color: var(--text-secondary); font-size: 11px; line-height: 1.6; margin-top: 12px; }

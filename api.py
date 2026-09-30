@@ -3,6 +3,7 @@ Web 与 Python 双向交互桥梁 API (JsBridgeAPI)
 """
 import json
 import os
+import sys
 import threading
 from collections import deque
 from typing import Dict, Optional
@@ -223,6 +224,8 @@ class JsBridgeAPI:
         return self.engine._diagnostic_permissions()
 
     def open_input_settings(self):
+        if sys.platform != "darwin":
+            return
         import subprocess
         subprocess.run(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"], check=False)
 

@@ -4,8 +4,6 @@
 """
 import os
 import sys
-import webview
-from api import JsBridgeAPI
 
 
 def get_ui_content() -> str:
@@ -56,6 +54,10 @@ def get_ui_content() -> str:
 
 
 def main():
+    from platform_support import configure_dpi
+    configure_dpi()
+    import webview
+    from api import JsBridgeAPI
     api = JsBridgeAPI()
     html_content = get_ui_content()
 
@@ -72,8 +74,33 @@ def main():
     api.set_window(window)
 
     # 启动 WebKit 运行循环
-    webview.start(debug=False)
+    options = {}
+    if sys.platform == "win32":
+        from platform_support import recordings_directory
+        cache = recordings_directory().parent / "webview"
+        cache.mkdir(parents=True, exist_ok=True)
+        options["storage_path"] = str(cache)
+    webview.start(gui="edgechromium" if sys.platform == "win32" else None, debug=False, **options)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--restart-helper":
+        from app_restart import run_windows_helper
+        raise SystemExit(run_windows_helper(sys.argv[2:]))
+    if os.environ.get("MOUSE_ASSISTANT_CI_SMOKE") == "1" and len(sys.argv) == 3:
+        if sys.argv[1] == "--ci-smoke":
+            from windows_smoke import run
+            raise SystemExit(run(sys.argv[2]))
+        if sys.argv[1] == "--ci-probe":
+            from pathlib import Path
+            Path(sys.argv[2]).write_text("started")
+            raise SystemExit(0)
+    try:
+        main()
+    except Exception as error:
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None,
+                "启动失败："+str(error)+"\n请安装 Microsoft Edge WebView2 Runtime，并确保程序目录中的 _internal 文件夹完整。",
+                "鼠标动作助手", 0x10)
+        raise

@@ -5,6 +5,7 @@ const api = () => window.pywebview && window.pywebview.api;
 const el = id => document.getElementById(id);
 let editingRecordId = null, renameSaving = false;
 let restartPending = false;
+let restartButtonLabel = "重启应用使授权生效";
 let deletingRecordId = null, deletePending = false;
 function formatRecordTime(value) {
   const date = new Date(value);
@@ -184,7 +185,7 @@ window.onStateChange = function(state, data = {}) {
   if (state === "ERROR") {
     if (restartPending) {
       restartPending = false; busy = false;
-      el("restartPermissionBtn").textContent = "重启应用使授权生效";
+      el("restartPermissionBtn").textContent = restartButtonLabel;
       el("permissionRefreshStatus").textContent = data.message || "重启失败，请重试";
       renderRecords();
     }
@@ -276,7 +277,7 @@ async function restartForPermissions() {
     if (!result.success) throw new Error(result.error);
   } catch (error) {
     restartPending = false; busy = false;
-    el("restartPermissionBtn").textContent = "重启应用使授权生效";
+    el("restartPermissionBtn").textContent = restartButtonLabel;
     el("permissionRefreshStatus").textContent = String(error.message || error);
     showToast(String(error.message || error), "error");
     renderRecords();
@@ -313,6 +314,20 @@ async function checkPermission() {
       new Promise((resolve, reject) => { timeout = setTimeout(() => reject(new Error("权限检测超时")), 5000); })
     ]);
     if (restartPending) return;
+    const windows = status.platform === "windows";
+    document.body.classList.toggle("platform-windows", windows);
+    if (windows) {
+      restartButtonLabel = "重新启动应用";
+      el("restartPermissionBtn").textContent = restartButtonLabel;
+      el("permissionTitle").textContent = "Windows 运行说明";
+      el("permissionDescription").textContent = status.note;
+      el("permBadge").className = "perm-badge granted";
+      el("permBadge").title = status.note;
+      el("permText").textContent = status.is_elevated ? "Windows · 管理员运行" : "Windows · 普通权限";
+      el("permissionDetails").textContent = "无需 macOS 输入监控或辅助功能授权。";
+      el("permissionRefreshStatus").textContent = "已检查运行环境。录制和回放仍受 Windows 权限级别与安全桌面限制。";
+      return;
+    }
     const granted = key => status[key] === true;
     const label = key => granted(key) ? "已生效" : status[key] === false ? "未生效" : "检测异常";
     const trusted = granted("accessibility") && granted("listen_events") && granted("post_events");

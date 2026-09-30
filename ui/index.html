@@ -189,17 +189,17 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-icon">⚠️</div>
-        <h3>录制与回放权限</h3>
+        <h3 id="permissionTitle">录制与回放权限</h3>
         <button class="modal-close" onclick="closePermModal()">×</button>
       </div>
       <div class="modal-body">
         <p id="permissionDetails" class="modal-desc" role="status">正在读取各项权限…</p>
         <p id="permissionRefreshStatus" class="record-status" role="status">返回本窗口会重新检查权限。</p>
         <button id="refreshPermissionBtn" class="action-btn" onclick="checkPermission()">刷新权限状态</button>
-        <p class="modal-desc">
+        <p id="permissionDescription" class="modal-desc">
           录制其他应用的操作需要<b>输入监控</b>，回放需要<b>辅助功能</b>权限。更新应用后可能需要为当前版本重新授权；开关已开但检测未通过时，请退出应用后重新启动。
         </p>
-        <div class="fix-steps">
+        <div class="fix-steps mac-permission-only">
           <div class="step-item">
             <span class="step-num">1</span>
             <span>检查<b>「隐私与安全性 → 输入监控」</b>中的当前应用。</span>

@@ -164,6 +164,15 @@ vm.runInContext(fs.readFileSync('ui/app.js','utf8'), context);
   assert.equal(elements.inputPermissionBtn.textContent, '打开输入监控 · 已授权');
   assert.equal(elements.accessibilityPermissionBtn.textContent, '打开辅助功能 · 已授权');
   assert.ok(!html.includes('permissionOverall'));
+  bridge.get_permissions = async () => ({platform:'windows', accessibility:true, listen_events:true,
+    post_events:true, requires_permissions:false, is_elevated:false, note:'Windows UIPI test note'});
+  elements.permModal.classList.remove('hidden');
+  await vm.runInContext('checkPermission()', context);
+  assert.ok(documentBodyHasWindows());
+  assert.equal(elements.permText.textContent, 'Windows · 普通权限');
+  assert.equal(elements.permissionTitle.textContent, 'Windows 运行说明');
+  assert.equal(elements.permissionDescription.textContent, 'Windows UIPI test note');
+  assert.equal(elements.permModal.classList.contains('hidden'), false);
   await vm.runInContext('restartForPermissions()', context);
   assert.equal(restartCalls, 0, '录制过程中不能重启');
   vm.runInContext('isRecording = false; isPlaying = false;', context);
@@ -179,3 +188,7 @@ vm.runInContext(fs.readFileSync('ui/app.js','utf8'), context);
   assert.equal(elements.restartPermissionBtn.disabled, true);
   console.log('UI tests passed: empty, list, select, targeted playback, busy guards, no canvas');
 })().catch(error => {console.error(error); process.exitCode=1;});
+
+function documentBodyHasWindows() {
+  return vm.runInContext('document.body.classList.contains("platform-windows")', context);
+}

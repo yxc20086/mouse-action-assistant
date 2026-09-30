@@ -8,12 +8,13 @@ import sys
 import threading
 import time
 from typing import Callable, Dict, List, Optional
-import Quartz
 from pynput import keyboard, mouse
+from mouse_backends import create_backend
+from permission_checker import get_permission_status
 
 class MacroEngine:
     def __init__(self, on_event_broadcast: Optional[Callable[[Dict], None]] = None,
-                 on_state_change: Optional[Callable[[str, Dict], None]] = None):
+                 on_state_change: Optional[Callable[[str, Dict], None]] = None, backend=None):
         self.on_event_broadcast = on_event_broadcast
         self.on_state_change = on_state_change
 
@@ -38,31 +39,13 @@ class MacroEngine:
         self._last_click_pos = (0, 0)
         self._last_click_time: float = 0.0
         self._click_count: int = 1
-        try:
-            self._event_source = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
-        except Exception:
-            self._event_source = None
-
-        self.mouse_controller = mouse.Controller()
+        self.backend = backend or create_backend()
 
         # 启动全局快捷键监听
         self._init_hotkeys()
 
     def get_screen_size(self) -> Dict[str, int]:
-        """与鼠标事件一致的桌面逻辑坐标范围（包括副屏）。"""
-        try:
-            error, displays, count = Quartz.CGGetActiveDisplayList(32, None, None)
-            if error or not count:
-                raise RuntimeError("无法读取显示器")
-            bounds = [Quartz.CGDisplayBounds(d) for d in displays[:count]]
-            x = min(b.origin.x for b in bounds)
-            y = min(b.origin.y for b in bounds)
-            right = max(b.origin.x + b.size.width for b in bounds)
-            bottom = max(b.origin.y + b.size.height for b in bounds)
-            return {"x": x, "y": y, "width": right - x, "height": bottom - y}
-        except Exception:
-            return {"width": 1710, "height": 1107}
-
+        return self.backend.screen_bounds()
 
     def _init_hotkeys(self):
         """配置全局快捷键与急停侦测"""
@@ -161,7 +144,7 @@ class MacroEngine:
                 return
             self.recording_diagnostics["samples"].append(self._diagnostic_sample(listener))
             if not listener.is_alive():
-                message = "鼠标监听已中断，当前轨迹可能不完整。请检查当前 App 的辅助功能/输入监控权限并重新录制。"
+                message = "鼠标监听已中断，当前轨迹可能不完整。请检查运行权限、桌面状态并重新录制。"
                 try:
                     listener.join(timeout=0)
                 except Exception as e:
@@ -172,33 +155,15 @@ class MacroEngine:
                 return
 
     def _diagnostic_permissions(self):
-        from permission_checker import is_accessibility_trusted
-        result = {"accessibility": is_accessibility_trusted()}
-        for key, name in [("listen_events", "CGPreflightListenEventAccess"),
-                          ("post_events", "CGPreflightPostEventAccess")]:
-            try:
-                result[key] = bool(getattr(Quartz, name)())
-            except Exception as e:
-                result[key] = {"error": str(e)}
-        return result
+        return get_permission_status()
 
     def _diagnostic_sample(self, listener):
-        # 独立于事件回调的只读采样，不注入事件，不收集按键、窗口标题或网页内容。
         sample = {"time": round(time.perf_counter() - self._record_start_time, 4),
                   "listener_alive": listener.is_alive(), "event_count": len(self.events)}
         try:
-            point = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
-            sample["pointer"] = [point.x, point.y]
-            sample["left_pressed"] = bool(Quartz.CGEventSourceButtonState(
-                Quartz.kCGEventSourceStateCombinedSessionState, Quartz.kCGMouseButtonLeft))
-        except Exception as e:
-            sample["pointer_error"] = str(e)
-        try:
-            from AppKit import NSWorkspace
-            app = NSWorkspace.sharedWorkspace().frontmostApplication()
-            sample["frontmost_app"] = app.bundleIdentifier() if app else None
-        except Exception as e:
-            sample["frontmost_error"] = str(e)
+            sample.update(self.backend.diagnostic())
+        except Exception as error:
+            sample["pointer_error"] = str(error)
         return sample
 
     def stop_recording(self) -> Dict:
@@ -301,7 +266,7 @@ class MacroEngine:
         if not is_accessibility_trusted(prompt_user=False):
             if self.on_state_change:
                 self.on_state_change("PERMISSION_DENIED", {})
-            return {"success": False, "error": "macOS 辅助功能未授权或失效！请根据弹窗指引关闭开关再重新开启。"}
+            return {"success": False, "error": "当前输入权限不可用，请查看运行权限说明。"}
 
         # 2. 状态自愈：如果线程已经结束但 state 依然停留在非 IDLE，强制自愈为 IDLE
         if self.state in ("COUNTDOWN", "PLAYING") and self._player_thread and not self._player_thread.is_alive():
@@ -373,9 +338,9 @@ class MacroEngine:
         if (time.perf_counter() - self._play_start_time) < 0.5:
             return False
         try:
-            pos = self.mouse_controller.position
+            pos = self.backend.position()
             # 距离屏幕左上角 4 像素以内
-            if 0 < pos[0] <= 4 and 0 < pos[1] <= 4:
+            if 0 <= pos[0] <= 4 and 0 <= pos[1] <= 4:
                 self._corner_hit_count += 1
                 if self._corner_hit_count >= 6:
                     return True
@@ -458,103 +423,47 @@ class MacroEngine:
             if self.on_state_change:
                 self.on_state_change("IDLE", {"summary": self.get_summary()})
 
-    def _post_hid_event(self, ev):
-        """派发失败必须交给回放线程报告，不能伪装成点击成功。"""
-        if ev is None:
-            raise RuntimeError("无法创建鼠标事件")
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
-
     def _dispatch_event(self, evt: Dict):
-        etype = evt["type"]
-        x, y = evt["x"], evt["y"]
-        pt = Quartz.CGPointMake(x, y)
-
-        if etype == "move":
-            mtype, btn = Quartz.kCGEventMouseMoved, Quartz.kCGMouseButtonLeft
-            for name, drag_type, button in [
-                ("left", Quartz.kCGEventLeftMouseDragged, Quartz.kCGMouseButtonLeft),
-                ("right", Quartz.kCGEventRightMouseDragged, Quartz.kCGMouseButtonRight),
-                ("middle", Quartz.kCGEventOtherMouseDragged, Quartz.kCGMouseButtonCenter),
-            ]:
-                if name in self._pressed_buttons:
-                    mtype, btn = drag_type, button
-                    break
-            ev = Quartz.CGEventCreateMouseEvent(self._event_source, mtype, pt, btn)
-            self._post_hid_event(ev)
-
-            # 回放时同步广播至前端雷达画布追踪
-            if self.on_event_broadcast:
-                self.on_event_broadcast({"type": "move", "x": x, "y": y})
-
-        elif etype in ("click_down", "click_up"):
-            btn_str = evt.get("button", "left")
-            if etype == "click_up" and btn_str not in self._pressed_buttons:
+        kind, x, y = evt["type"], evt["x"], evt["y"]
+        if kind == "move":
+            self.backend.move(x, y, self._pressed_buttons)
+        elif kind in ("click_down", "click_up"):
+            button = evt.get("button", "left")
+            if button not in ("left", "right", "middle"):
+                raise ValueError("不支持的鼠标按键")
+            if kind == "click_up" and button not in self._pressed_buttons:
                 return
-
-            if btn_str == "right":
-                mtype_down = Quartz.kCGEventRightMouseDown
-                mtype_up = Quartz.kCGEventRightMouseUp
-                btn = Quartz.kCGMouseButtonRight
-            elif btn_str == "middle":
-                mtype_down = Quartz.kCGEventOtherMouseDown
-                mtype_up = Quartz.kCGEventOtherMouseUp
-                btn = Quartz.kCGMouseButtonCenter
-            else:
-                mtype_down = Quartz.kCGEventLeftMouseDown
-                mtype_up = Quartz.kCGEventLeftMouseUp
-                btn = Quartz.kCGMouseButtonLeft
-
-            if etype == "click_down":
+            if kind == "click_down":
                 now = time.perf_counter()
-                dist = abs(x - self._last_click_pos[0]) + abs(y - self._last_click_pos[1])
-                if (now - self._last_click_time < 0.45 and dist < 8
-                        and getattr(self, "_last_click_button", None) == btn_str):
+                distance = abs(x-self._last_click_pos[0]) + abs(y-self._last_click_pos[1])
+                if (now-self._last_click_time < 0.45 and distance < 8
+                        and getattr(self, "_last_click_button", None) == button):
                     self._click_count += 1
                 else:
                     self._click_count = 1
-                self._last_click_time = now
-                self._last_click_pos = (x, y)
-                self._last_click_button = btn_str
-                self._button_click_counts[btn_str] = self._click_count
-                # 先登记，确保派发异常时也能尝试释放。
-                self._pressed_buttons.add(btn_str)
-
-            ev = Quartz.CGEventCreateMouseEvent(
-                self._event_source, mtype_down if etype == "click_down" else mtype_up, pt, btn)
-            Quartz.CGEventSetIntegerValueField(
-                ev, Quartz.kCGMouseEventClickState, self._button_click_counts.get(btn_str, 1))
-            self._post_hid_event(ev)
-            if etype == "click_up":
-                self._pressed_buttons.discard(btn_str)
-
-            # 7. 回放时向界面广播水波纹动画与点击状态
-            if self.on_event_broadcast:
-                self.on_event_broadcast({"type": etype, "x": x, "y": y, "button": btn_str})
-
-        elif etype == "scroll":
-            Quartz.CGWarpMouseCursorPosition(pt)
-            dx = evt.get("dx", 0)
-            dy = evt.get("dy", 0)
-            ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitPixel, 2, dy * 10, dx * 10)
-            self._post_hid_event(ev)
+                self._last_click_time, self._last_click_pos = now, (x, y)
+                self._last_click_button = button
+                self._button_click_counts[button] = self._click_count
+                self._pressed_buttons.add(button)
+            self.backend.button(x, y, button, kind == "click_down",
+                                self._button_click_counts.get(button, 1))
+            if kind == "click_up":
+                self._pressed_buttons.discard(button)
+        elif kind == "scroll":
+            self.backend.scroll(x, y, evt.get("dx", 0), evt.get("dy", 0))
+        else:
+            raise ValueError("不支持的鼠标事件")
+        if self.on_event_broadcast:
+            self.on_event_broadcast({"type": kind, "x": x, "y": y, "button": evt.get("button", "left")})
 
     def _safety_release(self):
-        for name, mtype, btn in [
-            ("left", Quartz.kCGEventLeftMouseUp, Quartz.kCGMouseButtonLeft),
-            ("right", Quartz.kCGEventRightMouseUp, Quartz.kCGMouseButtonRight),
-            ("middle", Quartz.kCGEventOtherMouseUp, Quartz.kCGMouseButtonCenter),
-        ]:
-            if name not in self._pressed_buttons:
-                continue
+        for button in tuple(self._pressed_buttons):
             try:
-                pt = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
-                ev = Quartz.CGEventCreateMouseEvent(self._event_source, mtype, pt, btn)
-                Quartz.CGEventSetIntegerValueField(
-                    ev, Quartz.kCGMouseEventClickState, self._button_click_counts.get(name, 1))
-                self._post_hid_event(ev)
-                self._pressed_buttons.discard(name)
-            except Exception as e:
-                print(f"释放鼠标 {name} 失败: {e}")
+                x, y = self.backend.position()
+                self.backend.button(x, y, button, False, self._button_click_counts.get(button, 1))
+                self._pressed_buttons.discard(button)
+            except Exception as error:
+                print(f"释放鼠标 {button} 失败: {error}")
 
     def get_summary(self) -> Dict:
         total = len(self.events)

@@ -8,6 +8,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
+from platform_support import recordings_directory
 
 
 def validate_events(events):
@@ -35,8 +36,7 @@ def validate_events(events):
 
 class RecordStore:
     def __init__(self, directory=None):
-        self.directory = Path(directory) if directory is not None else (
-            Path.home() / "Library/Application Support/com.mouse.macro.assistant/recordings")
+        self.directory = Path(directory) if directory is not None else recordings_directory()
         self.records = {}
         self.warnings = []
         self.lock = threading.RLock()

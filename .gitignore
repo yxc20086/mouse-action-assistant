@@ -22,6 +22,7 @@ htmlcov/
 /recordings/
 .trash/
 *.log
+windows-*-smoke.png
 .env
 .env.*
 *.pem
