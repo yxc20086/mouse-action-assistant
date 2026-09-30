@@ -111,13 +111,22 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 1. 打开仓库 **Actions → Build desktop apps → Run workflow**。
 2. 分支选 **main**。
-3. 在“版本号”填写未使用过的版本，例如 **1.0.3**（也接受 `v1.0.3`）。
-4. 勾选 **“发布到 Releases”**，再点击绿色 **Run workflow**。
-5. 等“Publish GitHub Release”成功后，去 [Releases](https://github.com/yxc20086/mouse-action-assistant/releases) 下载 ZIP 或安装包。
+3. 在“版本号”填写未使用过的版本，例如 **1.0.4**（也接受 `v1.0.4`）。
+4. 按需填写 **“更新说明”**（支持 Markdown，发布后公开显示）；留空会自动汇总提交记录。
+5. 勾选 **“发布到 Releases”**，再点击绿色 **Run workflow**。
+6. 等“Publish GitHub Release”成功后，去 [Releases](https://github.com/yxc20086/mouse-action-assistant/releases) 下载 ZIP 或安装包。
 
 不勾选发布时只打包，产物放在该次运行的 **Artifacts → release-bundle**；版本号可留空。网页填写的版本覆盖本次构建的应用版本，并写入安装包和 `build-info.json`，但不会改写 `main` 分支的 `VERSION` 文件。该文件继续作为本地/普通推送构建的默认版本。
 
 流程先检查版本号是否已存在，再运行双平台测试与打包。只有构建和校验全部通过，才给本次被测试的提交创建标签并公开发布；使用 GitHub 自带令牌创建的标签不会重复触发一轮构建。已存在的标签或 Release（含草稿）会直接拒绝，绝不覆盖旧版本。
+
+### 发布页的更新内容
+
+- 填写“更新说明”时，优先显示填写的内容（最多 10000 字符），不会混入自动提交列表。
+- 留空或通过标签发版时，查找当前提交历史中最近发布的版本，汇总之后的提交标题及链接，并附完整版本对比链接。正式版本会跳过预发布版本和草稿。
+- 首次发布展示提交历史；同一提交重新发不同版本时，会明确写明没有新增代码提交，不编造更新内容。
+- 提交较多时最多展示 200 条，并提供完整历史/对比链接。更新内容放在发布页上方，安装说明保留在下方。
+- 每次打包都会生成 **Artifacts → release-notes-preview**，可先不勾选发布来查看说明预览。正式发布时按当时可用的历史发布重新生成；已经发布的旧版本说明不会被本配置自动修改。
 
 ### 通过 Git 标签自动发布
 
@@ -125,8 +134,8 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 ```bash
 git pull --ff-only
-git tag v1.0.3
-git push origin v1.0.3
+git tag v1.0.4
+git push origin v1.0.4
 ```
 
 标签推送后将使用标签中的版本号执行 Windows/macOS 测试与构建；**两平台全部通过、产物齐全且校验通过后**，才自动创建 [GitHub Release](https://github.com/yxc20086/mouse-action-assistant/releases)。发布步骤再次确认标签仍指向本次测试的提交，避免标签移动导致产物与源码不一致。

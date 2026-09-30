@@ -10,6 +10,15 @@ import urllib.request
 from scripts.release_assets import VERSION
 
 
+def clean_manual_notes(value):
+    if not isinstance(value, str) or "\x00" in value:
+        raise ValueError("更新说明必须是文本，不能包含空字符")
+    value = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if len(value) > 10000:
+        raise ValueError("更新说明最多 10000 个字符")
+    return value
+
+
 def normalize_version(value):
     if not isinstance(value, str):
         raise ValueError("版本号必须是文本")
@@ -83,6 +92,7 @@ def check_remote(plan, repository, api=github_api):
 
 
 def main():
+    clean_manual_notes(os.environ.get("INPUT_UPDATE_NOTES", ""))
     plan = resolve_plan(os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REF_TYPE"],
                         os.environ["GITHUB_REF_NAME"], os.environ.get("INPUT_VERSION", ""),
                         os.environ.get("INPUT_PUBLISH", "false"),

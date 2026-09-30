@@ -13,6 +13,7 @@ htmlcov/
 /dmg_staging/
 /downloaded/
 /release-assets/
+/release-notes-preview.md
 *.app/
 *.dmg
 *.spec

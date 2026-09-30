@@ -5,10 +5,12 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import urllib.parse
 
 from scripts.release_assets import ASSETS
 from scripts.release_plan import check_remote, github_api, normalize_version
+from scripts.release_notes import build_release_notes
 
 
 def verify_bundle(directory, tag, sha):
@@ -44,12 +46,14 @@ def verify_bundle(directory, tag, sha):
     return [directory/name for name in sorted(names | {"SHA256SUMS.txt"})]
 
 
-def publish(directory, plan, repository, api=github_api, run=subprocess.run):
+def publish(directory, plan, repository, api=github_api, run=subprocess.run, release_notes=""):
     if plan["publish"] != "true":
         raise ValueError("未勾选发布，禁止创建 Release")
     files = verify_bundle(directory, plan["tag"], plan["sha"])
     check_remote(plan, repository, api)
     tag = plan["tag"]
+    # 先完成说明生成，API 读取失败时不提前占用版本标签。
+    notes = build_release_notes(repository, tag, plan["sha"], release_notes, api)
     if plan["create_tag"] == "true":
         # Git refs API 会拒绝已存在的标签，不能覆盖并发创建的版本。
         api(f"repos/{repository}/git/refs", method="POST",
@@ -57,14 +61,17 @@ def publish(directory, plan, repository, api=github_api, run=subprocess.run):
     commit = api(f"repos/{repository}/commits/{urllib.parse.quote(tag, safe='')}")
     if not commit or commit.get("sha") != plan["sha"]:
         raise ValueError("发布前标签发生变化，已停止")
-    args = ["gh", "release", "create", tag, *map(str, files), "--repo", repository,
-            "--verify-tag", "--title", "鼠标动作助手 "+tag, "--notes-file", ".github/RELEASE_NOTES.md"]
-    if "-" in tag:
-        args.extend(["--prerelease", "--latest=false"])
-    run(args, check=True)
+    with tempfile.TemporaryDirectory(prefix="mouse-release-notes-") as temporary:
+        notes_file = Path(temporary)/"release-notes.md"
+        notes_file.write_text(notes, encoding="utf-8")
+        args = ["gh", "release", "create", tag, *map(str, files), "--repo", repository,
+                "--verify-tag", "--title", "鼠标动作助手 "+tag, "--notes-file", str(notes_file)]
+        if "-" in tag:
+            args.extend(["--prerelease", "--latest=false"])
+        run(args, check=True)
 
 
 if __name__ == "__main__":
     publish("release-assets", {"tag": os.environ["RELEASE_TAG"], "sha": os.environ["RELEASE_SHA"],
                               "publish": os.environ["DO_PUBLISH"], "create_tag": os.environ["CREATE_TAG"]},
-            os.environ["GITHUB_REPOSITORY"])
+            os.environ["GITHUB_REPOSITORY"], release_notes=os.environ.get("UPDATE_NOTES", ""))

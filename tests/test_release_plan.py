@@ -71,7 +71,7 @@ class PublishTests(unittest.TestCase):
     def test_create_tag_only_after_validated_bundle(self):
         api = Mock(side_effect=[None, None, {"ref":"refs/tags/v1.0.3"}, {"sha":SHA}])
         run = Mock()
-        publish(self.output, self.plan, REPO, api, run)
+        publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
         api.assert_any_call(f"repos/{REPO}/git/refs", method="POST", data={"ref":"refs/tags/v1.0.3", "sha":SHA})
         args = run.call_args.args[0]
         self.assertIn("--verify-tag", args)
@@ -81,7 +81,7 @@ class PublishTests(unittest.TestCase):
     def test_bad_hash_cannot_create_tag(self):
         target = next(self.output.glob("*.exe")); target.write_bytes(b"tampered")
         api, run = Mock(), Mock()
-        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run)
+        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
         api.assert_not_called(); run.assert_not_called()
 
     def test_wrong_commit_and_version_rejected(self):
@@ -91,22 +91,37 @@ class PublishTests(unittest.TestCase):
     def test_unchecked_publish_has_no_external_writes(self):
         self.plan["publish"] = "false"
         api, run = Mock(), Mock()
-        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run)
+        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
         api.assert_not_called(); run.assert_not_called()
 
     def test_concurrent_tag_creation_cannot_be_overwritten(self):
         api = Mock(side_effect=[None, None, RuntimeError("already exists")]); run = Mock()
-        with self.assertRaises(RuntimeError): publish(self.output, self.plan, REPO, api, run)
+        with self.assertRaises(RuntimeError): publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
         run.assert_not_called()
 
     def test_pushed_tag_does_not_create_another_tag(self):
         self.plan["create_tag"] = "false"
         api = Mock(side_effect=[None, {"sha":SHA}, {"sha":SHA}]); run = Mock()
-        publish(self.output, self.plan, REPO, api, run)
+        publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
         self.assertTrue(all("method" not in call.kwargs for call in api.call_args_list))
         run.assert_called_once()
 
     def test_changed_tag_prevents_release(self):
         api = Mock(side_effect=[None, None, {}, {"sha":"b"*40}]); run = Mock()
-        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run)
+        with self.assertRaises(ValueError): publish(self.output, self.plan, REPO, api, run, release_notes="测试更新")
+        run.assert_not_called()
+
+    def test_release_uses_generated_notes_file(self):
+        api = Mock(side_effect=[None, None, {}, {"sha":SHA}])
+        content = []
+        def run(args, **kwargs):
+            content.append(Path(args[args.index("--notes-file")+1]).read_text(encoding="utf-8"))
+        publish(self.output, self.plan, REPO, api, run, release_notes="新增用户填写的更新说明")
+        self.assertIn("## 更新内容\n\n新增用户填写的更新说明", content[0])
+        self.assertIn("## 下载与安装", content[0])
+
+    def test_notes_failure_happens_before_tag_creation(self):
+        api = Mock(side_effect=[None, None, RuntimeError("history unavailable")]); run = Mock()
+        with self.assertRaises(RuntimeError): publish(self.output, self.plan, REPO, api, run)
+        self.assertFalse(any(call.kwargs.get("method") == "POST" for call in api.call_args_list))
         run.assert_not_called()

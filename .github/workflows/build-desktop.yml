@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（发布时必填，例如 1.0.3 或 v1.0.3；只打包可留空）'
+        description: '版本号（发布时必填，例如 1.0.4 或 v1.0.4；只打包可留空）'
         required: false
         type: string
         default: ''
@@ -16,6 +16,11 @@ on:
         required: true
         type: boolean
         default: false
+      update_notes:
+        description: '更新说明（选填，支持 Markdown；留空自动汇总提交记录，发布后公开显示）'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_PUBLISH: ${{ inputs.publish || false }}
+          INPUT_UPDATE_NOTES: ${{ inputs.update_notes }}
         run: python3 -m scripts.release_plan
 
   build:
@@ -148,6 +154,17 @@ jobs:
           path: downloaded
       - name: Verify and version artifacts
         run: python3 scripts/release_assets.py
+      - name: Generate release notes preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          UPDATE_NOTES: ${{ inputs.update_notes }}
+        run: python3 -m scripts.release_notes
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-preview
+          path: release-notes-preview.md
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: release-bundle
@@ -175,4 +192,5 @@ jobs:
           RELEASE_SHA: ${{ needs.plan.outputs.sha }}
           DO_PUBLISH: ${{ needs.plan.outputs.publish }}
           CREATE_TAG: ${{ needs.plan.outputs.create_tag }}
+          UPDATE_NOTES: ${{ inputs.update_notes }}
         run: python3 -m scripts.publish_release
