@@ -48,7 +48,8 @@ function Get-CanonicalPath([string]$Path) {
     return [IO.Path]::GetFullPath($buffer.ToString())
 }
 
-$report = @{ passed = $false; installer = 'NSIS'; version = (Get-Content VERSION -Raw).Trim() }
+$expectedVersion = if ($env:APP_VERSION) { $env:APP_VERSION } else { (Get-Content VERSION -Raw).Trim() }
+$report = @{ passed = $false; installer = 'NSIS'; version = $expectedVersion }
 $installer = (Resolve-Path 'dist-release/MouseActionAssistant-windows-x64-setup.exe').Path
 $installDir = Join-Path $env:RUNNER_TEMP ('Mouse 安装测试 ' + [guid]::NewGuid().ToString('N'))
 $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MouseActionAssistant'

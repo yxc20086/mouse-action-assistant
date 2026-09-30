@@ -105,22 +105,37 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 推送到 `main` 自动运行 GitHub Actions，也可在仓库 **Actions → Build desktop apps → Run workflow** 手动触发。构建成功后，在对应运行的 **Artifacts** 下载 Windows x64 ZIP/安装 EXE、macOS arm64 ZIP/DMG 或带校验文件的 `release-bundle`。ZIP 会先解压并实测运行，安装 EXE 会验证安装、运行和卸载。GitHub Actions 的附件下载界面可能仍用 ZIP 包装附件；正式 Releases 提供单独下载的 ZIP 和安装 EXE。普通分支构建只生成快照包，不创建正式 Release。
 
-### 自动发布到 GitHub Releases
+### 在 GitHub 网页一键打包发布
 
-先更新 `VERSION` 文件并提交推送（版本需与标签一致），然后创建版本标签，例如：
+无需本地终端，也无需先编辑 `VERSION`：
+
+1. 打开仓库 **Actions → Build desktop apps → Run workflow**。
+2. 分支选 **main**。
+3. 在“版本号”填写未使用过的版本，例如 **1.0.3**（也接受 `v1.0.3`）。
+4. 勾选 **“发布到 Releases”**，再点击绿色 **Run workflow**。
+5. 等“Publish GitHub Release”成功后，去 [Releases](https://github.com/yxc20086/mouse-action-assistant/releases) 下载 ZIP 或安装包。
+
+不勾选发布时只打包，产物放在该次运行的 **Artifacts → release-bundle**；版本号可留空。网页填写的版本覆盖本次构建的应用版本，并写入安装包和 `build-info.json`，但不会改写 `main` 分支的 `VERSION` 文件。该文件继续作为本地/普通推送构建的默认版本。
+
+流程先检查版本号是否已存在，再运行双平台测试与打包。只有构建和校验全部通过，才给本次被测试的提交创建标签并公开发布；使用 GitHub 自带令牌创建的标签不会重复触发一轮构建。已存在的标签或 Release（含草稿）会直接拒绝，绝不覆盖旧版本。
+
+### 通过 Git 标签自动发布
+
+也可以在本地为已经提交的代码创建版本标签：
 
 ```bash
 git pull --ff-only
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
-标签推送后将重新执行 Windows/macOS 测试与构建；**两平台全部通过、产物齐全且校验通过后**，才自动创建 [GitHub Release](https://github.com/yxc20086/mouse-action-assistant/releases)。发布步骤再次确认标签仍指向本次测试的提交，避免标签移动导致产物与源码不一致。
+标签推送后将使用标签中的版本号执行 Windows/macOS 测试与构建；**两平台全部通过、产物齐全且校验通过后**，才自动创建 [GitHub Release](https://github.com/yxc20086/mouse-action-assistant/releases)。发布步骤再次确认标签仍指向本次测试的提交，避免标签移动导致产物与源码不一致。
 
 - 正式版本：`v1.0.0`、`v1.0.1` 等。
 - 预发布：`v1.1.0-rc.1` 等带后缀标签，会标记为 Pre-release，不标记为 Latest。
 - 不要重复使用已发布的版本号；流程不会覆盖或删除已有 Release 附件。
-- 从 `main` 手动点 Run workflow 只构建，不发布；选择已有版本标签手动运行会进入发布流程。
+- 网页不勾选“发布到 Releases”时，只构建，不发布，即使分支下拉框选的是标签。
+- 如果发布中断后标签或草稿已创建，重跑不会自动覆盖；先检查已生成的 Release/日志，必要时使用新的版本号。
 - 不需要配置个人访问令牌；仅发布任务使用 GitHub 自动提供的 `GITHUB_TOKEN` 与 `contents: write` 权限。如果组织策略禁止写入，请由仓库管理员调整 Actions 权限。
 
 每次 Release 包含带版本号的 Windows ZIP 和安装 EXE、macOS ZIP 和 DMG，以及 `SHA256SUMS.txt`、`build-info.json`。四个程序产物必须齐全且验证通过才会发布。实际发布不会附带用户的录制或诊断数据。
@@ -131,6 +146,8 @@ git push origin v1.0.2
 ./venv/bin/python3 -m pip install -r requirements-dev.txt
 ./venv/bin/python3 scripts/build.py
 ```
+
+本地默认读取 `VERSION`；如需重建特定发布版本，可设置 `APP_VERSION` 环境变量覆盖，例如 macOS 上 `APP_VERSION=1.0.3 ./venv/bin/python3 scripts/build.py`，PowerShell 上先执行 `$env:APP_VERSION='1.0.3'`。
 
 Windows 构建机还需要 NSIS 3（可通过 `MAKENSIS_PATH` 指定 `makensis.exe`）；GitHub Windows 构建机已自带。Windows 产物为 `dist-release/MouseActionAssistant/`、`dist-release/MouseActionAssistant-windows-x64.zip` 与 `dist-release/MouseActionAssistant-windows-x64-setup.exe`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
 

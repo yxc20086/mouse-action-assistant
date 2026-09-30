@@ -31,10 +31,18 @@ class InstallerConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root/"VERSION").write_text("1.0.1\n", encoding="utf-8")
-            with patch.object(build, "ROOT", root), patch.dict(os.environ, {"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v1.0.1"}):
+            with patch.object(build, "ROOT", root), patch.dict(os.environ, {"APP_VERSION": "", "GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v1.0.1"}):
                 self.assertEqual(build.app_version(), "1.0.1")
                 with patch.dict(os.environ, {"GITHUB_REF_NAME": "v1.0.0"}):
                     with self.assertRaises(ValueError): build.app_version()
+
+    def test_workflow_version_overrides_local_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"VERSION").write_text("1.0.2\n", encoding="utf-8")
+            with patch.object(build, "ROOT", root), patch.dict(os.environ, {"APP_VERSION": "1.0.3", "GITHUB_REF_TYPE": "branch"}):
+                self.assertEqual(build.app_version(), "1.0.3")
+                self.assertEqual((root/"VERSION").read_text().strip(), "1.0.2")
 
     def test_installer_is_per_user_and_does_not_delete_records(self):
         source = Path("packaging/windows-installer.nsi").read_text(encoding="utf-8")

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def app_version():
-    version = (ROOT/"VERSION").read_text(encoding="utf-8").strip()
+    version = (os.environ.get("APP_VERSION") or (ROOT/"VERSION").read_text(encoding="utf-8")).strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version):
         raise ValueError("VERSION 文件格式无效")
     if os.environ.get("GITHUB_REF_TYPE") == "tag" and os.environ.get("GITHUB_REF_NAME") != "v"+version:

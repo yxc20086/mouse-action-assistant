@@ -22,7 +22,7 @@ def build_version(ref_type, ref_name, sha):
     return "snapshot-" + sha[:12]
 
 
-def prepare(source, output, ref_type, ref_name, sha, run_url):
+def prepare(source, output, ref_type, ref_name, sha, run_url, app_version=None):
     source, output = Path(source), Path(output)
     version = build_version(ref_type, ref_name, sha)
     # 先检查全部产物，防止只发布一个平台或不完整文件。
@@ -46,7 +46,8 @@ def prepare(source, output, ref_type, ref_name, sha, run_url):
     for name in ASSETS:
         destination = name.replace("MouseActionAssistant-", "MouseActionAssistant-"+version+"-", 1)
         shutil.copy2(source/name, output/destination)
-    (output/"build-info.json").write_text(json.dumps({"version": version, "commit": sha, "workflow_run": run_url},
+    (output/"build-info.json").write_text(json.dumps({"version": version, "app_version": app_version,
+                                                   "commit": sha, "workflow_run": run_url},
                                                    ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     checksums = []
     for path in sorted(output.iterdir()):
@@ -60,7 +61,8 @@ def prepare(source, output, ref_type, ref_name, sha, run_url):
 
 
 if __name__ == "__main__":
-    version = prepare("downloaded", "release-assets", os.environ["GITHUB_REF_TYPE"],
-                      os.environ["GITHUB_REF_NAME"], os.environ["GITHUB_SHA"],
-                      f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
+    version = prepare("downloaded", "release-assets", os.environ.get("PACKAGE_REF_TYPE", os.environ["GITHUB_REF_TYPE"]),
+                      os.environ.get("PACKAGE_REF_NAME", os.environ["GITHUB_REF_NAME"]), os.environ["GITHUB_SHA"],
+                      f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                      os.environ.get("APP_VERSION"))
     print(f"Release assets prepared: {version}")
