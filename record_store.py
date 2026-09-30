@@ -58,7 +58,7 @@ class RecordStore:
     def add(self, events, diagnostics=None, name=None):
         validate_events(events)
         now = datetime.now().astimezone()
-        record = {"id": uuid.uuid4().hex, "name": name or now.strftime("录制 %m-%d %H:%M:%S"),
+        record = {"id": uuid.uuid4().hex, "name": name or ("录制 " + now.strftime("%m-%d %H:%M:%S")),
                   "created_at": now.isoformat(), "events": copy.deepcopy(events),
                   "diagnostics": copy.deepcopy(diagnostics or {}), "saved": False}
         with self.lock:
