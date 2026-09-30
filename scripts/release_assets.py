@@ -7,7 +7,7 @@ import re
 import shutil
 import zipfile
 
-ASSETS = ("MouseActionAssistant-windows-x64-setup.exe", "MouseActionAssistant-macos-arm64.zip",
+ASSETS = ("MouseActionAssistant-windows-x64.zip", "MouseActionAssistant-windows-x64-setup.exe", "MouseActionAssistant-macos-arm64.zip",
           "MouseActionAssistant-macos-arm64.dmg")
 VERSION = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?\Z")
 

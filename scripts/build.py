@@ -40,6 +40,18 @@ def uninstall_manifest(source):
                      [f'RMDir "$INSTDIR\\{relative(path)}"' for path in directories]) + "\n"
 
 
+def build_windows_zip(output, name="MouseActionAssistant"):
+    output = Path(output)
+    source = output/name
+    archive = output/"MouseActionAssistant-windows-x64.zip"
+    if not (source/(name+".exe")).is_file() or not (source/"_internal").is_dir():
+        raise RuntimeError("Windows 便携包缺少 EXE 或运行依赖目录")
+    if archive.exists():
+        raise FileExistsError(f"便携包已存在，不覆盖：{archive}")
+    shutil.make_archive(str(archive.with_suffix("")), "zip", root_dir=output, base_dir=name)
+    return archive
+
+
 def main():
     os.chdir(ROOT)
     work, output = ROOT/"build-release", ROOT/"dist-release"
@@ -66,6 +78,7 @@ def main():
     args.append(str(ROOT/"app.py"))
     subprocess.run(args, check=True)
     if sys.platform == "win32":
+        print(build_windows_zip(output, name))
         installer = output/"MouseActionAssistant-windows-x64-setup.exe"
         if installer.exists():
             raise FileExistsError(f"安装包已存在，不覆盖：{installer}")

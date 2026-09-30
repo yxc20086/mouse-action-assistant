@@ -37,7 +37,7 @@ class ReleaseTests(unittest.TestCase):
                     path.write_bytes(b"unit-test-dmg-placeholder")
             output = root/"out"
             prepare(root, output, "tag", "v1.0.0", "a"*40, "https://example.test/run")
-            self.assertEqual(len(list(output.iterdir())), 5)
+            self.assertEqual(len(list(output.iterdir())), 6)
             self.assertEqual(json.loads((output/"build-info.json").read_text())["commit"], "a"*40)
             for line in (output/"SHA256SUMS.txt").read_text().splitlines():
                 digest, name = line.split("  ", 1)

@@ -2,12 +2,31 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from scripts import build
 
 
 class InstallerConfigTests(unittest.TestCase):
+    def test_portable_zip_contains_exe_and_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root/"MouseActionAssistant"
+            (source/"_internal").mkdir(parents=True)
+            (source/"MouseActionAssistant.exe").write_bytes(b"test exe")
+            (source/"_internal/runtime.dll").write_bytes(b"test runtime")
+            archive = build.build_windows_zip(root)
+            with zipfile.ZipFile(archive) as reader:
+                self.assertIsNone(reader.testzip())
+                self.assertEqual(reader.read("MouseActionAssistant/MouseActionAssistant.exe"), b"test exe")
+                self.assertEqual(reader.read("MouseActionAssistant/_internal/runtime.dll"), b"test runtime")
+            with self.assertRaises(FileExistsError): build.build_windows_zip(root)
+
+    def test_portable_zip_rejects_incomplete_payload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(RuntimeError): build.build_windows_zip(directory)
+
     def test_version_matches_release_tag(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

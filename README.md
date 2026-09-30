@@ -21,7 +21,11 @@ Windows / macOS 鼠标动作录制与循环回放工具。共享 Python、pynput
 
 下载 `MouseActionAssistant-版本号-windows-x64-setup.exe`，双击按向导安装，不需要手动解压或安装 Python。可以选择安装目录、添加桌面快捷方式；安装后从开始菜单启动“鼠标动作助手”。
 
-默认按当前用户安装到 `%LOCALAPPDATA%\Programs\MouseActionAssistant`，不自动申请管理员权限。在 Windows“设置 → 应用”中可卸载；卸载保留录制记录。安装或升级前请先停止录制／回放并退出程序，避免丢失尚未保存的操作。旧版 `v1.0.0` 的 ZIP 附件保留，新版本改用安装 EXE。
+也提供同版本 `MouseActionAssistant-版本号-windows-x64.zip` 免安装版：完整解压后运行里面的 `MouseActionAssistant.exe`，不要单独移动 EXE 或删除 `_internal`。从 `v1.0.2` 开始，每个版本同时保留 ZIP 与安装 EXE。
+
+两种版本功能相同，都不需要安装 Python，并共用当前用户的录制目录；请只运行其中一个。ZIP 是免安装形式，不表示录制数据随程序文件夹移动。
+
+安装版默认按当前用户安装到 `%LOCALAPPDATA%\Programs\MouseActionAssistant`，不自动申请管理员权限。在 Windows“设置 → 应用”中可卸载；卸载保留录制记录。安装或升级前请先停止录制／回放并退出程序，避免丢失尚未保存的操作。历史发布附件保留，不覆盖旧文件。
 
 需要 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 和 .NET Framework 4.8（Windows 10/11 通常已具备）。缺少运行时时应用会提示启动失败；本安装包不静默安装或修改这些系统运行时。
 
@@ -99,7 +103,7 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 ## 自动与本地构建
 
-推送到 `main` 自动运行 GitHub Actions，也可在仓库 **Actions → Build desktop apps → Run workflow** 手动触发。构建成功后，在对应运行的 **Artifacts** 下载 Windows x64 安装 EXE、macOS arm64 ZIP/DMG 或带校验文件的 `release-bundle`。GitHub Actions 的附件下载界面可能仍用 ZIP 包装附件；正式 Releases 提供可直接下载的安装 EXE。普通分支构建只生成快照包，不创建正式 Release。
+推送到 `main` 自动运行 GitHub Actions，也可在仓库 **Actions → Build desktop apps → Run workflow** 手动触发。构建成功后，在对应运行的 **Artifacts** 下载 Windows x64 ZIP/安装 EXE、macOS arm64 ZIP/DMG 或带校验文件的 `release-bundle`。ZIP 会先解压并实测运行，安装 EXE 会验证安装、运行和卸载。GitHub Actions 的附件下载界面可能仍用 ZIP 包装附件；正式 Releases 提供单独下载的 ZIP 和安装 EXE。普通分支构建只生成快照包，不创建正式 Release。
 
 ### 自动发布到 GitHub Releases
 
@@ -107,8 +111,8 @@ Windows CI 另有显式启用的 `--ci-smoke` 原生测试：在专用测试窗�
 
 ```bash
 git pull --ff-only
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 标签推送后将重新执行 Windows/macOS 测试与构建；**两平台全部通过、产物齐全且校验通过后**，才自动创建 [GitHub Release](https://github.com/yxc20086/mouse-action-assistant/releases)。发布步骤再次确认标签仍指向本次测试的提交，避免标签移动导致产物与源码不一致。
@@ -119,7 +123,7 @@ git push origin v1.0.1
 - 从 `main` 手动点 Run workflow 只构建，不发布；选择已有版本标签手动运行会进入发布流程。
 - 不需要配置个人访问令牌；仅发布任务使用 GitHub 自动提供的 `GITHUB_TOKEN` 与 `contents: write` 权限。如果组织策略禁止写入，请由仓库管理员调整 Actions 权限。
 
-每次 Release 包含带版本号的 Windows 安装 EXE、macOS ZIP 和 DMG，以及 `SHA256SUMS.txt`、`build-info.json`。实际发布不会附带用户的录制或诊断数据。
+每次 Release 包含带版本号的 Windows ZIP 和安装 EXE、macOS ZIP 和 DMG，以及 `SHA256SUMS.txt`、`build-info.json`。四个程序产物必须齐全且验证通过才会发布。实际发布不会附带用户的录制或诊断数据。
 
 本地使用平台原生 Python 执行（Windows 用 `.\venv\Scripts\python.exe`）：
 
@@ -128,6 +132,6 @@ git push origin v1.0.1
 ./venv/bin/python3 scripts/build.py
 ```
 
-Windows 构建机还需要 NSIS 3（可通过 `MAKENSIS_PATH` 指定 `makensis.exe`）；GitHub Windows 构建机已自带。Windows 产物位于 `dist-release/MouseActionAssistant/` 与 `dist-release/MouseActionAssistant-windows-x64-setup.exe`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
+Windows 构建机还需要 NSIS 3（可通过 `MAKENSIS_PATH` 指定 `makensis.exe`）；GitHub Windows 构建机已自带。Windows 产物为 `dist-release/MouseActionAssistant/`、`dist-release/MouseActionAssistant-windows-x64.zip` 与 `dist-release/MouseActionAssistant-windows-x64-setup.exe`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
 
 新的构建脚本不安装到系统目录，也不自动删除旧产物。旧的 `build_package.py` 会清理旧构建并覆盖本机应用，保留供参考，不用于当前跨平台构建。

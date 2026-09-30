@@ -46,13 +46,15 @@ jobs:
         run: python app.py --ci-smoke windows-source-smoke.json
       - name: Build application
         run: python scripts/build.py
-      - name: Test packaged Windows application
+      - name: Test extracted Windows portable ZIP
         if: runner.os == 'Windows'
         env:
           MOUSE_ASSISTANT_CI_SMOKE: '1'
         shell: pwsh
         run: |
-          $app = Resolve-Path 'dist-release/MouseActionAssistant/MouseActionAssistant.exe'
+          $portableDir = Join-Path $env:RUNNER_TEMP 'mouse-portable-test'
+          Expand-Archive -LiteralPath 'dist-release/MouseActionAssistant-windows-x64.zip' -DestinationPath $portableDir
+          $app = Resolve-Path (Join-Path $portableDir 'MouseActionAssistant/MouseActionAssistant.exe')
           $report = Join-Path $PWD 'windows-frozen-smoke.json'
           $process = Start-Process -FilePath $app -ArgumentList @('--ci-smoke', $report) -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Packaged smoke test timed out' }
