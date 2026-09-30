@@ -32,6 +32,8 @@ def run(output):
         user32.FindWindowW.restype = ctypes.c_void_p
         user32.ClientToScreen.argtypes = [ctypes.c_void_p, ctypes.POINTER(POINT)]
         user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+        user32.IsIconic.argtypes = [ctypes.c_void_p]
+        user32.IsIconic.restype = ctypes.c_int
         user32.GetDpiForWindow.argtypes = [ctypes.c_void_p]
         user32.GetDpiForWindow.restype = ctypes.c_uint
 
@@ -62,6 +64,14 @@ def run(output):
                 """)
                 hwnd = user32.FindWindowW(None, "Mouse Assistant CI " + str(os.getpid()))
                 assert hwnd, "Test window handle not found"
+                layout = window.evaluate_js("({height:innerHeight, settingsBottom:document.querySelector('.settings-grid').getBoundingClientRect().bottom, listHeight:document.getElementById('recordList').clientHeight})")
+                assert layout["settingsBottom"] <= layout["height"] and layout["listHeight"] > 60, layout
+                report["layout"] = layout
+                window.minimize()
+                wait_for(lambda: bool(user32.IsIconic(hwnd)), 5)
+                window.restore()
+                wait_for(lambda: not user32.IsIconic(hwnd), 5)
+                report["minimize_restore"] = True
                 user32.SetForegroundWindow(hwnd)
                 origin = POINT()
                 assert user32.ClientToScreen(hwnd, ctypes.byref(origin))
