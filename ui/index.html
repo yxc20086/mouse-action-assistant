@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>鼠标动作助手</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 背景氛围光晕与毛玻璃层 -->
+  <div class="glow-bg"></div>
+
+  <div class="app-layout">
+    <!-- 顶部状态栏 -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="2" width="14" height="20" rx="7"></rect>
+            <line x1="12" y1="6" x2="12" y2="10"></line>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>鼠标动作助手</h1>
+          <span class="version-tag">录制 · 选择 · 回放</span>
+        </div>
+      </div>
+
+      <!-- 权限指示胶囊 -->
+      <div id="permBadge" class="perm-badge checking" onclick="openPermissionSettings()" title="点击打开 macOS 辅助功能授权">
+        <span class="status-dot"></span>
+        <span id="permText">检测权限中...</span>
+      </div>
+    </header>
+
+    <section class="visualizer-card" aria-label="录制记录">
+      <div class="card-header">
+        <div class="card-title">
+          <span class="radar-dot"></span>
+          <span>录制记录</span>
+        </div>
+        <div class="live-telemetry">
+          <span id="recordCount" class="counter-tag">0 条记录</span>
+          <span class="counter-tag">动作: <b id="eventCount">0</b></span>
+          <span class="timer-tag">耗时: <b id="recordTimer">0.0s</b></span>
+        </div>
+      </div>
+
+      <div id="recordList" class="record-list" aria-label="选择要回放的录制记录"></div>
+      <p id="recordStatus" class="record-status" role="status">每次录制结束后自动保存，选中一条即可回放。</p>
+    </section>
+
+    <!-- 主控操作面板 -->
+    <section class="control-panel">
+      <!-- 录制按钮 -->
+      <button id="recordBtn" class="btn btn-record" onclick="toggleRecord()" title="开始后自动最小化；按 F7 停止、保存并恢复窗口">
+        <span class="btn-glow"></span>
+        <div class="btn-content">
+          <span class="icon-circle rec-icon"></span>
+          <span id="recordBtnText" class="btn-text">开始录制 (F7 / Ctrl+R)</span>
+        </div>
+      </button>
+
+      <!-- 回放按钮 -->
+      <button id="playBtn" class="btn btn-play" onclick="togglePlay()">
+        <span class="btn-glow"></span>
+        <div class="btn-content">
+          <span class="icon-triangle play-icon"></span>
+          <span id="playBtnText" class="btn-text">回放选中记录 (F8 / Ctrl+P)</span>
+        </div>
+      </button>
+    </section>
+
+    <!-- 紧急中断告示条 -->
+    <div class="safety-banner">
+      <div class="safety-icon">🛡️</div>
+      <div class="safety-content">
+        <strong>安全快捷键：</strong>
+        <span><code>Esc</code> 停止回放 · <code>F7</code> 停止录制 · 全局模式支持左上角急停</span>
+      </div>
+    </div>
+
+    <!-- 参数配置与管理网格 -->
+    <div class="settings-grid">
+      <!-- 回放参数卡片 -->
+      <div class="card settings-card compact-settings">
+        <div class="card-title-sm">⚙️ 回放循环参数</div>
+
+        <div class="form-row loop-row">
+          <label>循环播放次数</label>
+          <div class="input-group">
+            <input type="number" id="loopCount" value="1" min="1" max="999999" class="num-input">
+            <span class="unit">次</span>
+          </div>
+        </div>
+
+        <div class="form-row check-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="infiniteLoop" onchange="toggleInfinite()">
+            <span class="custom-check"></span>
+            <span>无限循环（Esc 停止）</span>
+          </label>
+        </div>
+
+        <div class="form-row check-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="autoMinimize" checked>
+            <span class="custom-check"></span>
+            <span>回放时自动最小化</span>
+          </label>
+        </div>
+
+        <div class="form-row speed-row">
+          <label>回放速度</label>
+          <div class="speed-selector">
+            <button class="chip" data-speed="0.5" onclick="setSpeed(0.5, this)">0.5x</button>
+            <button class="chip active" data-speed="1.0" onclick="setSpeed(1.0, this)">1.0x</button>
+            <button class="chip" data-speed="1.5" onclick="setSpeed(1.5, this)">1.5x</button>
+            <button class="chip" data-speed="2.0" onclick="setSpeed(2.0, this)">2.0x</button>
+            <button class="chip" data-speed="3.0" onclick="setSpeed(3.0, this)">3.0x</button>
+          </div>
+        </div>
+
+        <div class="form-row flex-split">
+          <div class="split-col">
+            <label>启动倒计时</label>
+            <div class="input-group">
+              <input type="number" id="countdownSec" value="3" min="0" max="60" class="num-input-sm">
+              <span class="unit">秒</span>
+            </div>
+          </div>
+          <div class="split-col">
+            <label>每轮间隔</label>
+            <div class="input-group">
+              <input type="number" id="loopInterval" value="0.5" step="0.1" min="0" class="num-input-sm">
+              <span class="unit">秒</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 轨迹文件与数据卡片 -->
+      <div class="card storage-card">
+        <div class="card-title-sm">📁 选中记录</div>
+        <p id="selectedName" class="selected-name">尚未选择记录</p>
+        <div class="track-info-box">
+          <div class="info-metric">
+            <span class="metric-label">包含动作</span>
+            <span id="metricEvents" class="metric-val">0</span>
+          </div>
+          <div class="info-metric">
+            <span class="metric-label">包含点击</span>
+            <span id="metricClicks" class="metric-val">0</span>
+          </div>
+          <div class="info-metric">
+            <span class="metric-label">轨迹时长</span>
+            <span id="metricDuration" class="metric-val">0.0s</span>
+          </div>
+        </div>
+
+        <div class="file-actions">
+          <button class="action-btn" onclick="saveTrackFile()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            导出选中记录
+          </button>
+          <button class="action-btn" onclick="loadTrackFile()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            导入已有轨迹
+          </button>
+          <small class="record-status">记录自动保存在本机，关闭应用后仍会保留。</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 倒计时与回放状态全屏浮层 (HUD) -->
+  <div id="hudOverlay" class="hud-overlay hidden">
+    <div class="hud-box">
+      <div id="hudCircle" class="hud-circle">
+        <span id="hudNumber">3</span>
+      </div>
+      <h2 id="hudTitle">准备开始回放...</h2>
+      <p id="hudSub">请将鼠标或窗口切换到目标软件，按 <code>Esc</code> 随时终止</p>
+    </div>
+  </div>
+
+  <!-- 权限诊断与修复向导弹窗 -->
+  <div id="permModal" class="perm-modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon">⚠️</div>
+        <h3>录制与回放权限</h3>
+        <button class="modal-close" onclick="closePermModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="permissionDetails" class="modal-desc" role="status">正在读取各项权限…</p>
+        <p id="permissionRefreshStatus" class="record-status" role="status">返回本窗口会重新检查权限。</p>
+        <button id="refreshPermissionBtn" class="action-btn" onclick="checkPermission()">刷新权限状态</button>
+        <p class="modal-desc">
+          录制其他应用的操作需要<b>输入监控</b>，回放需要<b>辅助功能</b>权限。更新应用后可能需要为当前版本重新授权；开关已开但检测未通过时，请退出应用后重新启动。
+        </p>
+        <div class="fix-steps">
+          <div class="step-item">
+            <span class="step-num">1</span>
+            <span>检查<b>「隐私与安全性 → 输入监控」</b>中的当前应用。</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">2</span>
+            <span>检查<b>「隐私与安全性 → 辅助功能」</b>中的鼠标动作助手。</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">3</span>
+            <span>授权后<b>完全退出并重新打开</b>，不要启动旧版。</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="inputPermissionBtn" class="modal-btn permission-action checking" onclick="openInputSettings()">
+          打开输入监控 · 待检测
+        </button>
+        <button id="accessibilityPermissionBtn" class="modal-btn permission-action checking" onclick="openAccessibilitySettings()">
+          打开辅助功能 · 待检测
+        </button>
+        <button id="restartPermissionBtn" class="modal-btn secondary" onclick="restartForPermissions()" title="待机时关闭并重新打开当前版本；已有记录会保留">
+          重启应用使授权生效
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="renameModal" class="perm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="renameTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="renameTitle">重命名录制记录</h3>
+        <button class="modal-close" onclick="closeRename()" aria-label="取消重命名">×</button>
+      </div>
+      <label for="renameInput" class="record-status">记录名称（最多 80 个字符）</label>
+      <input id="renameInput" class="rename-input" type="text" autocomplete="off">
+      <p id="renameError" class="rename-error" role="alert"></p>
+      <div class="modal-footer">
+        <button id="renameSave" class="modal-btn primary" onclick="saveRename()">保存名称</button>
+        <button class="modal-btn secondary" onclick="closeRename()">取消</button>
+      </div>
+    </div>
+  </div>
+  <div id="deleteRecordModal" class="perm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="deleteRecordTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="deleteRecordTitle">删除录制记录？</h3>
+        <button class="modal-close" onclick="closeDeleteRecord()" aria-label="取消删除">×</button>
+      </div>
+      <p id="deleteRecordName" class="selected-name"></p>
+      <p class="modal-desc">确认后将从列表移除此记录，不影响其他记录。已保存的原文件会移入记录库的回收目录；之前导出的文件不会删除。</p>
+      <p id="deleteRecordError" class="rename-error" role="alert"></p>
+      <div class="modal-footer">
+        <button id="deleteRecordCancel" class="modal-btn secondary" onclick="closeDeleteRecord()">取消</button>
+        <button id="deleteRecordConfirm" class="modal-btn delete-confirm" onclick="confirmDeleteRecord()">确认删除</button>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

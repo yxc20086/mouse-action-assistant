@@ -1,0 +1,36 @@
+# 本地运行环境和 Python 缓存
+/venv/
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 构建产物、应用与安装包
+/build*/
+/dist*/
+/dmg_staging/
+*.app/
+*.dmg
+*.spec
+*.egg-info/
+
+# 录制数据、诊断与本地配置（不公开上传）
+/*.json
+*.diagnostics.json
+/recordings/
+.trash/
+*.log
+.env
+.env.*
+*.pem
+*.key
+/.codex/
+/.agents/
+
+# 系统与编辑器文件
+.DS_Store
+._*
+.idea/
+.vscode/
