@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import zipfile
 
 from scripts.release_plan import resolve_plan, check_remote, normalize_version
@@ -121,7 +121,8 @@ class PublishTests(unittest.TestCase):
         self.assertIn("## 下载与安装", content[0])
 
     def test_notes_failure_happens_before_tag_creation(self):
-        api = Mock(side_effect=[None, None, RuntimeError("history unavailable")]); run = Mock()
-        with self.assertRaises(RuntimeError): publish(self.output, self.plan, REPO, api, run)
+        api = Mock(side_effect=[None, None]); run = Mock()
+        with patch("scripts.publish_release.build_release_notes", side_effect=RuntimeError("history unavailable")):
+            with self.assertRaises(RuntimeError): publish(self.output, self.plan, REPO, api, run)
         self.assertFalse(any(call.kwargs.get("method") == "POST" for call in api.call_args_list))
         run.assert_not_called()

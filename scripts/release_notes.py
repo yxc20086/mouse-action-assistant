@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import urllib.parse
 
-from scripts.release_plan import github_api, normalize_version, clean_manual_notes
+from scripts.release_plan import github_api, normalize_version, clean_manual_notes, read_version_notes
 
 MAX_COMMITS = 200
 
@@ -96,12 +96,12 @@ def automatic_changes(repository, tag, sha, api):
     return heading+"\n\n"+"\n".join(lines)+suffix+f"\n\n[提交历史](https://github.com/{repository}/commits/{sha})"
 
 
-def build_release_notes(repository, tag, sha, manual_notes="", api=github_api, installation_path=".github/RELEASE_NOTES.md"):
+def build_release_notes(repository, tag, sha, manual_notes="", api=github_api, installation_path=".github/RELEASE_NOTES.md", notes_directory="release-notes"):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("仓库或构建提交无效")
     if tag != "v"+normalize_version(tag):
         raise ValueError("版本标签无效")
-    manual = clean_manual_notes(manual_notes)
+    manual = clean_manual_notes(manual_notes) or read_version_notes(tag, notes_directory)
     changes = manual or automatic_changes(repository, tag, sha, api)
     installation = Path(installation_path).read_text(encoding="utf-8").strip()
     return ("## 更新内容\n\n"+changes+

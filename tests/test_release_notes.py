@@ -1,9 +1,10 @@
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from scripts.release_notes import build_release_notes, clean_manual_notes, MAX_COMMITS
+from scripts.release_plan import read_version_notes
 
 SHA = "a"*40
 REPO = "example/mouse"
@@ -22,9 +23,45 @@ class ReleaseNotesTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.installation = Path(self.temp.name)/"INSTALL.md"
         self.installation.write_text("## 下载与安装\n\nWindows ZIP / EXE，Mac ZIP / DMG。", encoding="utf-8")
+        self.notes_directory = Path(self.temp.name)/"release-notes"
+        self.notes_directory.mkdir()
 
     def build(self, api, manual="", tag="v1.0.4"):
-        return build_release_notes(REPO, tag, SHA, manual, api, self.installation)
+        return build_release_notes(REPO, tag, SHA, manual, api, self.installation, self.notes_directory)
+
+    def test_multiline_version_file_keeps_markdown(self):
+        notes = "### 新增\n- 第一项\n- 第二项\n\n### 修复\n- 修复点击问题"
+        (self.notes_directory/"1.0.4.md").write_text(notes, encoding="utf-8")
+        api = Mock(side_effect=AssertionError("Should use version file"))
+        text = self.build(api)
+        self.assertIn(notes, text)
+        self.assertLess(text.index("### 新增"), text.index("## 下载与安装"))
+        api.assert_not_called()
+
+    def test_short_text_overrides_version_file(self):
+        (self.notes_directory/"1.0.4.md").write_text("文件说明", encoding="utf-8")
+        text = self.build(Mock(), "手动简述优先")
+        self.assertIn("手动简述优先", text)
+        self.assertNotIn("文件说明", text)
+
+    def test_v_prefix_and_utf8_bom_are_supported(self):
+        (self.notes_directory/"v1.0.4.md").write_text("多行说明\n第二行", encoding="utf-8-sig")
+        self.assertEqual(read_version_notes("1.0.4", self.notes_directory), "多行说明\n第二行")
+
+    def test_duplicate_or_empty_version_files_are_rejected(self):
+        first = self.notes_directory/"1.0.4.md"
+        first.write_text(" \n", encoding="utf-8")
+        with self.assertRaises(ValueError): read_version_notes("1.0.4", self.notes_directory)
+        first.write_text("说明", encoding="utf-8")
+        (self.notes_directory/"v1.0.4.md").write_text("重复说明", encoding="utf-8")
+        with self.assertRaises(ValueError): read_version_notes("1.0.4", self.notes_directory)
+
+    def test_symlinks_oversized_files_and_invalid_names_are_rejected(self):
+        with patch.object(Path, "is_symlink", return_value=True):
+            with self.assertRaises(ValueError): read_version_notes("1.0.4", self.notes_directory)
+        (self.notes_directory/"1.0.4.md").write_bytes(b"x"*50001)
+        with self.assertRaises(ValueError): read_version_notes("1.0.4", self.notes_directory)
+        with self.assertRaises(ValueError): read_version_notes("../../secret", self.notes_directory)
 
     def test_manual_notes_precede_installation_and_do_not_fetch_commits(self):
         api = Mock(side_effect=AssertionError("Manual notes should not query history"))

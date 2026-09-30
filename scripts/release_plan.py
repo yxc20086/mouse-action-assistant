@@ -30,6 +30,33 @@ def normalize_version(value):
     return tag[1:]
 
 
+def read_version_notes(value, directory="release-notes"):
+    """只读取构建提交中的版本说明文件，不接受任意路径或符号链接。"""
+    version = normalize_version(value)
+    folder = Path(directory)
+    if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+        raise ValueError("release-notes 必须是仓库中的普通目录")
+    candidates = [folder/(version+".md"), folder/("v"+version+".md")]
+    found = [path for path in candidates if path.exists() or path.is_symlink()]
+    if len(found) > 1:
+        raise ValueError("发现两个同版本的更新说明文件，请只保留一个")
+    if not found:
+        return ""
+    path = found[0]
+    if path.is_symlink() or not path.is_file() or path.resolve().parent != folder.resolve():
+        raise ValueError("更新说明必须是 release-notes 目录中的普通 Markdown 文件")
+    if path.stat().st_size > 50000:
+        raise ValueError("更新说明文件过大，请控制在 10000 个字符以内")
+    try:
+        value = path.read_text(encoding="utf-8-sig")
+    except UnicodeError as error:
+        raise ValueError("更新说明文件需要使用 UTF-8 编码") from error
+    notes = clean_manual_notes(value)
+    if not notes:
+        raise ValueError("版本更新说明文件为空，请填写内容或移除该文件以使用自动汇总")
+    return notes
+
+
 def resolve_plan(event, ref_type, ref_name, input_version, input_publish, default_version, sha):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("缺少有效构建提交")
@@ -92,18 +119,20 @@ def check_remote(plan, repository, api=github_api):
 
 
 def main():
-    clean_manual_notes(os.environ.get("INPUT_UPDATE_NOTES", ""))
+    short_notes = clean_manual_notes(os.environ.get("INPUT_UPDATE_NOTES", ""))
     plan = resolve_plan(os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REF_TYPE"],
                         os.environ["GITHUB_REF_NAME"], os.environ.get("INPUT_VERSION", ""),
                         os.environ.get("INPUT_PUBLISH", "false"),
                         Path("VERSION").read_text(encoding="utf-8"), os.environ["GITHUB_SHA"])
+    file_notes = "" if short_notes else read_version_notes(plan["app_version"])
+    notes_source = "单行简述" if short_notes else "版本 Markdown 文件" if file_notes else "自动汇总提交"
     check_remote(plan, os.environ["GITHUB_REPOSITORY"])
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         for key, value in plan.items():
             output.write(f"{key}={value}\n")
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
         summary.write(f"## {'正式发布' if plan['publish'] == 'true' else '仅打包'}\n\n"
-                      f"应用版本：{plan['app_version']}\n\n构建提交：{plan['sha']}\n")
+                      f"应用版本：{plan['app_version']}\n\n构建提交：{plan['sha']}\n\n更新说明来源：{notes_source}\n")
     print(json.dumps(plan, ensure_ascii=False))
 
 

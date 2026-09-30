@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       update_notes:
-        description: '更新说明（选填，支持 Markdown；留空自动汇总提交记录，发布后公开显示）'
+        description: '单行简述（可留空，请勿按 Enter；多行说明请编辑 release-notes/版本号.md）'
         required: false
         type: string
         default: ''
