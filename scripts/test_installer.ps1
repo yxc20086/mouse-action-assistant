@@ -14,10 +14,10 @@ function Invoke-CheckedProcess {
     if ($process.ExitCode -ne 0) { throw "Process failed ($($process.ExitCode)): $File" }
 }
 
-$report = @{ passed = $false; installer = 'Inno Setup'; version = (Get-Content VERSION -Raw).Trim() }
+$report = @{ passed = $false; installer = 'NSIS'; version = (Get-Content VERSION -Raw).Trim() }
 $installer = (Resolve-Path 'dist-release/MouseActionAssistant-windows-x64-setup.exe').Path
 $installDir = Join-Path $env:RUNNER_TEMP ('Mouse 安装测试 ' + [guid]::NewGuid().ToString('N'))
-$registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{5F39376B-3069-40B4-A8C2-F3C819D76892}_is1'
+$registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MouseActionAssistant'
 $dataDir = Join-Path $env:LOCALAPPDATA 'MouseActionAssistant\recordings'
 $sentinel = Join-Path $dataDir ('installer-preserve-' + [guid]::NewGuid().ToString('N') + '.txt')
 $shortcutName = '鼠标动作助手.lnk'
@@ -30,12 +30,11 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
     Set-Content -LiteralPath $sentinel -Value 'keep recordings' -Encoding utf8
-    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART',
-        ('/DIR="' + $installDir + '"'), '/TASKS="desktopicon"',
-        ('/LOG="' + (Join-Path $PWD 'windows-installer-install.log') + '"'))
+    # NSIS 要求 /D 位于最后且不加引号，其后的所有字符均属于路径。
+    $arguments = @('/S', ('/D=' + $installDir))
     Invoke-CheckedProcess $installer $arguments
     $exe = Join-Path $installDir 'MouseActionAssistant.exe'
-    $uninstaller = Join-Path $installDir 'unins000.exe'
+    $uninstaller = Join-Path $installDir 'Uninstall.exe'
     foreach ($file in @($exe, $uninstaller, (Join-Path $installDir '_internal\python311.dll'), $desktopShortcut, $startShortcut)) {
         if (-not (Test-Path -LiteralPath $file)) { throw "Missing installed file: $file" }
     }
@@ -57,9 +56,13 @@ try {
     if (-not (Test-Path $sentinel)) { throw 'Reinstall removed recording data' }
     $report.reinstall = $true
 
-    Invoke-CheckedProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
-        ('/LOG="' + (Join-Path $PWD 'windows-installer-uninstall.log') + '"'))
-    if ((Test-Path $exe) -or (Test-Path $registry) -or (Test-Path $desktopShortcut) -or (Test-Path $startShortcut)) {
+    Invoke-CheckedProcess $uninstaller @('/S')
+    # NSIS 将卸载器复制到临时目录继续执行，因此要等待真正的清理完成。
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (((Test-Path $exe) -or (Test-Path $uninstaller) -or (Test-Path $registry)) -and [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+    }
+    if ((Test-Path $exe) -or (Test-Path $uninstaller) -or (Test-Path $registry) -or (Test-Path $desktopShortcut) -or (Test-Path $startShortcut)) {
         throw 'Uninstall left application, registry entry or shortcuts behind'
     }
     if (-not (Test-Path $sentinel)) { throw 'Uninstall removed recording data' }

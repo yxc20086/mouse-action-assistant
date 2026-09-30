@@ -18,9 +18,19 @@ class InstallerConfigTests(unittest.TestCase):
                     with self.assertRaises(ValueError): build.app_version()
 
     def test_installer_is_per_user_and_does_not_delete_records(self):
-        source = Path("packaging/windows-installer.iss").read_text(encoding="utf-8")
-        self.assertIn("PrivilegesRequired=lowest", source)
-        self.assertIn(r"DefaultDirName={localappdata}\Programs\MouseActionAssistant", source)
-        self.assertIn("recursesubdirs createallsubdirs", source)
-        self.assertIn("skipifsilent", source)
-        self.assertNotIn("[UninstallDelete]", source)
+        source = Path("packaging/windows-installer.nsi").read_text(encoding="utf-8")
+        self.assertIn("RequestExecutionLevel user", source)
+        self.assertIn(r'InstallDir "$LOCALAPPDATA\Programs\MouseActionAssistant"', source)
+        self.assertIn('!include "${UNINSTALL_FILES}"', source)
+        self.assertNotIn("RMDir /r", source)
+
+    def test_uninstall_manifest_removes_only_packaged_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"_internal").mkdir()
+            (root/"_internal/test$file.txt").write_text("data")
+            manifest = build.uninstall_manifest(root)
+            self.assertIn(r'Delete "$INSTDIR\_internal\test$$file.txt"', manifest)
+            self.assertIn(r'RMDir "$INSTDIR\_internal"', manifest)
+            self.assertNotIn("/r", manifest)
+            self.assertNotIn("*", manifest)

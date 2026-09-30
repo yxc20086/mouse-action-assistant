@@ -20,13 +20,24 @@ def app_version():
     return version
 
 
-def find_iscc():
-    candidates = [os.environ.get("ISCC_PATH"), shutil.which("ISCC.exe"),
-                  str(Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))/"Inno Setup 6/ISCC.exe")]
+def find_makensis():
+    candidates = [os.environ.get("MAKENSIS_PATH"), shutil.which("makensis.exe"),
+                  str(Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))/"NSIS/makensis.exe")]
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return candidate
-    raise RuntimeError("请先安装 Inno Setup 6，或用 ISCC_PATH 指定 ISCC.exe")
+    raise RuntimeError("请先安装 NSIS 3，或用 MAKENSIS_PATH 指定 makensis.exe")
+
+
+def uninstall_manifest(source):
+    source = Path(source)
+    def relative(path):
+        return str(path.relative_to(source)).replace("/", "\\").replace("$", "$$")
+    files = sorted(path for path in source.rglob("*") if path.is_file())
+    directories = sorted((path for path in source.rglob("*") if path.is_dir()),
+                         key=lambda path: len(path.parts), reverse=True)
+    return "\n".join([f'Delete "$INSTDIR\\{relative(path)}"' for path in files] +
+                     [f'RMDir "$INSTDIR\\{relative(path)}"' for path in directories]) + "\n"
 
 
 def main():
@@ -58,14 +69,17 @@ def main():
         installer = output/"MouseActionAssistant-windows-x64-setup.exe"
         if installer.exists():
             raise FileExistsError(f"安装包已存在，不覆盖：{installer}")
-        installer_script = work/"windows-installer.iss"
-        installer_script.write_text((ROOT/"packaging/windows-installer.iss").read_text(encoding="utf-8"), encoding="utf-8-sig")
-        subprocess.run([find_iscc(), "/DMyAppVersion="+version,
-                        "/DSourceDir="+str(output/name), "/DOutputPath="+str(output),
-                        "/DIconPath="+str(work/"AppIcon.ico"),
+        installer_script = work/"windows-installer.nsi"
+        installer_script.write_text((ROOT/"packaging/windows-installer.nsi").read_text(encoding="utf-8"), encoding="utf-8-sig")
+        manifest = work/"uninstall-files.nsh"
+        manifest.write_text(uninstall_manifest(output/name), encoding="utf-8-sig")
+        subprocess.run([find_makensis(), "/DAPP_VERSION="+version,
+                        "/DVERSION_NUMERIC="+version.split("-")[0]+".0",
+                        "/DSOURCE_DIR="+str(output/name), "/DOUTPUT_FILE="+str(installer),
+                        "/DICON_FILE="+str(work/"AppIcon.ico"), "/DUNINSTALL_FILES="+str(manifest),
                         str(installer_script)], check=True)
         if not installer.is_file():
-            raise RuntimeError("Inno Setup 未生成安装包")
+            raise RuntimeError("NSIS 未生成安装包")
         print(installer)
     else:
         app = output/(name+".app")

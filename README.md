@@ -23,7 +23,7 @@ Windows / macOS 鼠标动作录制与循环回放工具。共享 Python、pynput
 
 默认按当前用户安装到 `%LOCALAPPDATA%\Programs\MouseActionAssistant`，不自动申请管理员权限。在 Windows“设置 → 应用”中可卸载；卸载保留录制记录。安装或升级前请先停止录制／回放并退出程序，避免丢失尚未保存的操作。旧版 `v1.0.0` 的 ZIP 附件保留，新版本改用安装 EXE。
 
-需要 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 和 .NET Framework 4.8（Windows 10/11 通常已具备）。安装向导会提示未检测到的 WebView2；本安装包不静默安装或修改这些系统运行时。
+需要 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 和 .NET Framework 4.8（Windows 10/11 通常已具备）。缺少运行时时应用会提示启动失败；本安装包不静默安装或修改这些系统运行时。
 
 源码启动（PowerShell）：
 
@@ -128,6 +128,6 @@ git push origin v1.0.1
 ./venv/bin/python3 scripts/build.py
 ```
 
-Windows 构建机还需要 Inno Setup 6（可通过 `ISCC_PATH` 指定 `ISCC.exe`）；GitHub Windows 构建机已自带。Windows 产物位于 `dist-release/MouseActionAssistant/` 与 `dist-release/MouseActionAssistant-windows-x64-setup.exe`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
+Windows 构建机还需要 NSIS 3（可通过 `MAKENSIS_PATH` 指定 `makensis.exe`）；GitHub Windows 构建机已自带。Windows 产物位于 `dist-release/MouseActionAssistant/` 与 `dist-release/MouseActionAssistant-windows-x64-setup.exe`，macOS 产物为 `dist-release/鼠标动作助手.app` 与对应架构的 DMG。不能在 macOS 上直接交叉生成 Windows EXE。
 
 新的构建脚本不安装到系统目录，也不自动删除旧产物。旧的 `build_package.py` 会清理旧构建并覆盖本机应用，保留供参考，不用于当前跨平台构建。
