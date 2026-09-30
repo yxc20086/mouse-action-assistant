@@ -6,13 +6,33 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def app_version():
+    version = (ROOT/"VERSION").read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version):
+        raise ValueError("VERSION 文件格式无效")
+    if os.environ.get("GITHUB_REF_TYPE") == "tag" and os.environ.get("GITHUB_REF_NAME") != "v"+version:
+        raise ValueError("版本标签必须与 VERSION 文件一致")
+    return version
+
+
+def find_iscc():
+    candidates = [os.environ.get("ISCC_PATH"), shutil.which("ISCC.exe"),
+                  str(Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))/"Inno Setup 6/ISCC.exe")]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise RuntimeError("请先安装 Inno Setup 6，或用 ISCC_PATH 指定 ISCC.exe")
 
 
 def main():
     os.chdir(ROOT)
     work, output = ROOT/"build-release", ROOT/"dist-release"
+    version = app_version()
     work.mkdir(exist_ok=True)
     name = "MouseActionAssistant" if sys.platform == "win32" else "鼠标动作助手"
     args = [sys.executable, "-m", "PyInstaller", "--windowed", "--name="+name,
@@ -35,8 +55,18 @@ def main():
     args.append(str(ROOT/"app.py"))
     subprocess.run(args, check=True)
     if sys.platform == "win32":
-        shutil.make_archive(str(output/"MouseActionAssistant-windows-x64"), "zip", root_dir=output, base_dir=name)
-        print(output/"MouseActionAssistant-windows-x64.zip")
+        installer = output/"MouseActionAssistant-windows-x64-setup.exe"
+        if installer.exists():
+            raise FileExistsError(f"安装包已存在，不覆盖：{installer}")
+        installer_script = work/"windows-installer.iss"
+        installer_script.write_text((ROOT/"packaging/windows-installer.iss").read_text(encoding="utf-8"), encoding="utf-8-sig")
+        subprocess.run([find_iscc(), "/DMyAppVersion="+version,
+                        "/DSourceDir="+str(output/name), "/DOutputPath="+str(output),
+                        "/DIconPath="+str(work/"AppIcon.ico"),
+                        str(installer_script)], check=True)
+        if not installer.is_file():
+            raise RuntimeError("Inno Setup 未生成安装包")
+        print(installer)
     else:
         app = output/(name+".app")
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)

@@ -1,0 +1,75 @@
+# 仅在 GitHub 的一次性 Windows 桌面验证安装、运行、重装和卸载。
+$ErrorActionPreference = 'Stop'
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:MOUSE_ASSISTANT_CI_SMOKE -ne '1') {
+    throw 'Installer integration test is restricted to the explicitly enabled CI desktop'
+}
+
+function Invoke-CheckedProcess {
+    param([string]$File, [string[]]$Arguments, [int]$TimeoutSeconds = 180)
+    $process = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        $process.Kill()
+        throw "Process timed out: $File"
+    }
+    if ($process.ExitCode -ne 0) { throw "Process failed ($($process.ExitCode)): $File" }
+}
+
+$report = @{ passed = $false; installer = 'Inno Setup'; version = (Get-Content VERSION -Raw).Trim() }
+$installer = (Resolve-Path 'dist-release/MouseActionAssistant-windows-x64-setup.exe').Path
+$installDir = Join-Path $env:RUNNER_TEMP ('Mouse 安装测试 ' + [guid]::NewGuid().ToString('N'))
+$registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{5F39376B-3069-40B4-A8C2-F3C819D76892}_is1'
+$dataDir = Join-Path $env:LOCALAPPDATA 'MouseActionAssistant\recordings'
+$sentinel = Join-Path $dataDir ('installer-preserve-' + [guid]::NewGuid().ToString('N') + '.txt')
+$shortcutName = '鼠标动作助手.lnk'
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) $shortcutName
+$startShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) $shortcutName
+
+try {
+    if ((Test-Path $registry) -or (Test-Path $installDir) -or (Test-Path $desktopShortcut) -or (Test-Path $startShortcut)) {
+        throw 'Pre-existing installation detected; test will not modify it'
+    }
+    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+    Set-Content -LiteralPath $sentinel -Value 'keep recordings' -Encoding utf8
+    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART',
+        ('/DIR="' + $installDir + '"'), '/TASKS="desktopicon"',
+        ('/LOG="' + (Join-Path $PWD 'windows-installer-install.log') + '"'))
+    Invoke-CheckedProcess $installer $arguments
+    $exe = Join-Path $installDir 'MouseActionAssistant.exe'
+    $uninstaller = Join-Path $installDir 'unins000.exe'
+    foreach ($file in @($exe, $uninstaller, (Join-Path $installDir '_internal\python311.dll'), $desktopShortcut, $startShortcut)) {
+        if (-not (Test-Path -LiteralPath $file)) { throw "Missing installed file: $file" }
+    }
+    $entry = Get-ItemProperty $registry
+    if ($entry.DisplayVersion -ne $report.version) { throw 'Installed version does not match VERSION' }
+    $shell = New-Object -ComObject WScript.Shell
+    if ($shell.CreateShortcut($startShortcut).TargetPath -ne $exe) { throw 'Start menu shortcut has incorrect target' }
+    $report.installed = $true
+    $report.shortcuts = $true
+
+    $smokeReport = Join-Path $PWD 'windows-installed-smoke.json'
+    Invoke-CheckedProcess $exe @('--ci-smoke', ('"' + $smokeReport + '"'))
+    $smoke = Get-Content $smokeReport -Raw | ConvertFrom-Json
+    if (-not $smoke.passed -or -not $smoke.frozen) { throw 'Installed application native smoke test failed' }
+    $report.installed_app_smoke = $true
+
+    # 同版本重新安装不应擦除录制目录。
+    Invoke-CheckedProcess $installer $arguments
+    if (-not (Test-Path $sentinel)) { throw 'Reinstall removed recording data' }
+    $report.reinstall = $true
+
+    Invoke-CheckedProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+        ('/LOG="' + (Join-Path $PWD 'windows-installer-uninstall.log') + '"'))
+    if ((Test-Path $exe) -or (Test-Path $registry) -or (Test-Path $desktopShortcut) -or (Test-Path $startShortcut)) {
+        throw 'Uninstall left application, registry entry or shortcuts behind'
+    }
+    if (-not (Test-Path $sentinel)) { throw 'Uninstall removed recording data' }
+    $report.uninstalled = $true
+    $report.recordings_preserved = $true
+    $report.passed = $true
+} catch {
+    $report.error = $_.ToString()
+    throw
+} finally {
+    $report | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 'windows-installer-smoke.json'
+    if (Test-Path -LiteralPath $sentinel) { Remove-Item -LiteralPath $sentinel }
+}

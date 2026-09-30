@@ -62,11 +62,18 @@ jobs:
       - name: Archive macOS application
         if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent dist-release/鼠标动作助手.app dist-release/MouseActionAssistant-macos-arm64.zip
+      - name: Test Windows setup, installed app and uninstall
+        if: runner.os == 'Windows'
+        env:
+          MOUSE_ASSISTANT_CI_SMOKE: '1'
+        shell: pwsh
+        run: ./scripts/test_installer.ps1
       - name: Upload application
         uses: actions/upload-artifact@v7
         with:
           name: MouseActionAssistant-${{ matrix.artifact }}
           path: |
+            dist-release/*-setup.exe
             dist-release/*.zip
             dist-release/*.dmg
           if-no-files-found: error
@@ -78,6 +85,7 @@ jobs:
           path: |
             windows-*-smoke.json
             windows-*-smoke.png
+            windows-installer-*.log
           if-no-files-found: ignore
 
   prepare-release:

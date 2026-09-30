@@ -31,6 +31,8 @@ class ReleaseTests(unittest.TestCase):
                 if path.suffix == ".zip":
                     with zipfile.ZipFile(path, "w") as archive:
                         archive.writestr("test", "data")
+                elif path.suffix == ".exe":
+                    path.write_bytes(b"MZ" + b"\x00"*58 + (64).to_bytes(4, "little") + b"PE\x00\x00")
                 else:
                     path.write_bytes(b"unit-test-dmg-placeholder")
             output = root/"out"

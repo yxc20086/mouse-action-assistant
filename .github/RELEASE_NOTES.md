@@ -1,6 +1,6 @@
 ## 下载与安装
 
-- **Windows x64**：下载 `windows-x64.zip`，完整解压后运行 `MouseActionAssistant.exe`，不要单独移动 EXE。需要 Microsoft Edge WebView2 Runtime 与 .NET Framework 4.8。
+- **Windows x64**：下载 `windows-x64-setup.exe`，双击按向导安装。支持安装目录选择、开始菜单与可选桌面快捷方式，以及 Windows 应用卸载入口。升级前先停止录制并退出；卸载保留录制记录。需要 Microsoft Edge WebView2 Runtime 与 .NET Framework 4.8。
 - **Mac Apple Silicon（M 系列）**：下载 `macos-arm64.dmg`，将应用拖入 Applications。也提供 ZIP 格式。
 - **SHA256SUMS.txt**：包含安装产物的 SHA-256 校验值。
 - **build-info.json**：记录对应源码提交和自动构建地址。

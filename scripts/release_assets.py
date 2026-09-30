@@ -7,7 +7,7 @@ import re
 import shutil
 import zipfile
 
-ASSETS = ("MouseActionAssistant-windows-x64.zip", "MouseActionAssistant-macos-arm64.zip",
+ASSETS = ("MouseActionAssistant-windows-x64-setup.exe", "MouseActionAssistant-macos-arm64.zip",
           "MouseActionAssistant-macos-arm64.dmg")
 VERSION = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?\Z")
 
@@ -34,6 +34,14 @@ def prepare(source, output, ref_type, ref_name, sha, run_url):
             with zipfile.ZipFile(path) as archive:
                 if not archive.namelist() or archive.testzip() is not None:
                     raise ValueError(f"ZIP 校验失败：{name}")
+        if path.suffix == ".exe":
+            with path.open("rb") as handle:
+                header = handle.read(64)
+                if len(header) < 64 or header[:2] != b"MZ":
+                    raise ValueError(f"无效的 Windows 安装程序：{name}")
+                handle.seek(int.from_bytes(header[60:64], "little"))
+                if handle.read(4) != b"PE\x00\x00":
+                    raise ValueError(f"无效的 PE 可执行文件：{name}")
     output.mkdir(parents=True, exist_ok=False)
     for name in ASSETS:
         destination = name.replace("MouseActionAssistant-", "MouseActionAssistant-"+version+"-", 1)
